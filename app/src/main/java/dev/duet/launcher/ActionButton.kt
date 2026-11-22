@@ -54,26 +54,28 @@ fun DuetAction.describe(appKey: String): String =
     if (this == DuetAction.LAUNCH_APP) DuetApp.instance.apps.all.firstOrNull { it.key == appKey }?.label ?: "Open an app (none chosen)"
     else title
 
+/**
+ * Runs [action]. Anything it opens goes to the screen the button was pressed on (the screen
+ * of the touch), and the launcher moves over to the other screen.
+ */
 fun performAction(activity: MainActivity, action: DuetAction, appKey: String) {
     val ui = activity.ui
+    val apps = DuetApp.instance.apps
+    val here = ScreenCoverage.lastTouchScreen
+    fun start(intent: Intent, asApp: Boolean = false) = apps.startOn(intent, here, asApp)
     when (action) {
         DuetAction.NONE -> Unit
         DuetAction.SEARCH -> { ui.listOpen = true; ui.query = ""; ui.searchRequest++ }
         DuetAction.APP_LIST -> ui.listOpen = true
         DuetAction.NOTIFICATIONS -> expandStatusBar(activity, "expandNotificationsPanel")
         DuetAction.QUICK_SETTINGS -> expandStatusBar(activity, "expandSettingsPanel")
-        DuetAction.CAMERA -> start(activity, Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
-        DuetAction.ASSISTANT -> start(activity, Intent(Intent.ACTION_VOICE_COMMAND)) ||
-            start(activity, Intent(Intent.ACTION_ASSIST))
-        DuetAction.WEB_SEARCH -> start(activity, Intent(Intent.ACTION_WEB_SEARCH))
-        DuetAction.LAUNCH_APP -> DuetApp.instance.apps.all.firstOrNull { it.key == appKey }
-            ?.let { DuetApp.instance.apps.launch(it) }
-        DuetAction.SETTINGS -> activity.openSettings()
+        DuetAction.CAMERA -> start(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), asApp = true)
+        DuetAction.ASSISTANT -> start(Intent(Intent.ACTION_VOICE_COMMAND)) || start(Intent(Intent.ACTION_ASSIST))
+        DuetAction.WEB_SEARCH -> start(Intent(Intent.ACTION_WEB_SEARCH))
+        DuetAction.LAUNCH_APP -> apps.all.firstOrNull { it.key == appKey }?.let { apps.launchOn(it, here) }
+        DuetAction.SETTINGS -> start(Intent(activity, SettingsActivity::class.java))
     }
 }
-
-private fun start(ctx: Context, intent: Intent): Boolean =
-    runCatching { ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
 
 /** StatusBarManager's expand methods aren't public SDK, but are allowed for apps holding EXPAND_STATUS_BAR. */
 @SuppressLint("WrongConstant")

@@ -80,6 +80,24 @@ object ScreenCoverage {
         return overlap.width().toLong() * overlap.height() * 2 > screen.width().toLong() * screen.height()
     }
 
+    // --- Launching onto a screen -------------------------------------------------------
+
+    /** [target]'s rect while spanned, else null. */
+    fun boundsOf(target: Covered): Rect? {
+        val g = geometry ?: return null
+        return when (target) { Covered.FIRST -> g.first; Covered.SECOND -> g.second; Covered.NONE -> null }
+    }
+
+    /**
+     * ActivityOptions that open an activity on [target], and records that so the launcher
+     * moves to the other screen. Null (a plain launch) when not spanned.
+     */
+    fun launchOptions(target: Covered): android.os.Bundle? {
+        val bounds = boundsOf(target)
+        noteLaunch(target.takeIf { bounds != null })
+        return bounds?.let { android.app.ActivityOptions.makeBasic().setLaunchBounds(it).toBundle() }
+    }
+
     // --- Heuristic source -------------------------------------------------------------
 
     private val stack = ArrayDeque<Covered>()

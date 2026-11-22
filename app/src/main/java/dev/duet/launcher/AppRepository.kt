@@ -4,6 +4,8 @@ import android.app.ActivityOptions
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.net.Uri
@@ -105,10 +107,12 @@ class AppRepository(private val ctx: Context) {
         return loadedPack
     }
 
-    fun launch(app: AppInfo) {
-        ScreenCoverage.noteLaunch()
-        runCatching { launcherApps.startMainActivity(app.component, app.user, null, null) }
-    }
+    /**
+     * A tap: opens [app] on the screen opposite the touch (the Duo's own rule for new apps),
+     * made explicit so an app that's already running doesn't reopen on its old screen and
+     * leave the launcher guessing which screen is free.
+     */
+    fun launch(app: AppInfo) = launchOn(app, ScreenCoverage.lastTouchScreen.opposite())
 
     /**
      * Opens [app] on a chosen screen while the launcher is spanned, by asking for that
@@ -116,11 +120,8 @@ class AppRepository(private val ctx: Context) {
      * new tasks — an app already running reopens on whichever screen it was last on.
      */
     fun launchOn(app: AppInfo, target: Covered) {
-        val g = ScreenCoverage.geometry
-        if (g == null || target == Covered.NONE) return launch(app)
-        ScreenCoverage.noteLaunch(target)
-        val bounds = if (target == Covered.FIRST) g.first else g.second
-        val opts = ActivityOptions.makeBasic().setLaunchBounds(bounds).toBundle()
+        val opts = ScreenCoverage.launchOptions(target)
+        val bounds = ScreenCoverage.boundsOf(target)
         val started = if (app.user == android.os.Process.myUserHandle()) runCatching {
             ctx.startActivity(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component)
@@ -129,6 +130,34 @@ class AppRepository(private val ctx: Context) {
             )
         }.isSuccess else false
         if (!started) runCatching { launcherApps.startMainActivity(app.component, app.user, bounds, opts) }
+    }
+
+    /**
+     * Starts [intent] on [target] (or normally when not spanned), resolving it to one app first.
+     * [asApp]: open the handling app's main screen instead. Some apps (Clock's "show alarms")
+     * hand the intent on to another activity of theirs, which drops the requested screen.
+     */
+    fun startOn(intent: Intent, target: Covered, asApp: Boolean = false): Boolean {
+        if (intent.component == null) intent.component = pickHandler(intent) ?: return false
+        val launch = if (asApp) ctx.packageManager.getLaunchIntentForPackage(intent.component!!.packageName) ?: intent else intent
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        return runCatching { ctx.startActivity(launch, ScreenCoverage.launchOptions(target)) }.isSuccess
+    }
+
+    /**
+     * The app that should handle [intent]: the user's default if they set one, otherwise the
+     * built-in app. Avoids Android's "Complete action using" picker, which can't be sent to a
+     * particular screen.
+     */
+    private fun pickHandler(intent: Intent): ComponentName? {
+        val pm = ctx.packageManager
+        val default = pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo
+        if (default != null && default.packageName != "android" && default.exported) {
+            return ComponentName(default.packageName, default.name)
+        }
+        val all = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY).map { it.activityInfo }
+        val pick = all.firstOrNull { it.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0 } ?: all.firstOrNull()
+        return pick?.let { ComponentName(it.packageName, it.name) }
     }
 
     fun openInfo(app: AppInfo) {
