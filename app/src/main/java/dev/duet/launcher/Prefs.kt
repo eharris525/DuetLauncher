@@ -1,0 +1,119 @@
+package dev.duet.launcher
+
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.compose.runtime.mutableStateOf
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
+
+data class WidgetEntry(val id: Int, val heightDp: Int)
+
+/** How the two screens are used when the launcher is spanned across the hinge. */
+enum class DualLayout(val title: String, val summary: String) {
+    HOME_AND_LIST(
+        "Home + app list",
+        "Clock, widgets and favorites on one screen; the full A–Z list always open on the other",
+    ),
+    WIDGETS_AND_HOME(
+        "Widgets + home",
+        "Clock and widgets on one screen; favorites with the alphabet bar on the other",
+    ),
+}
+
+/**
+ * SharedPreferences backed by Compose state, so every screen recomposes the moment a
+ * setting changes (including the home screen while Settings is open on the other screen).
+ */
+class Prefs(context: Context) {
+    private val sp = context.getSharedPreferences("duet", Context.MODE_PRIVATE)
+
+    private fun <T> pref(
+        key: String,
+        default: T,
+        read: SharedPreferences.(String, T) -> T,
+        write: SharedPreferences.Editor.(String, T) -> Unit,
+    ): ReadWriteProperty<Any?, T> = object : ReadWriteProperty<Any?, T> {
+        private val state = mutableStateOf(sp.read(key, default))
+        override fun getValue(thisRef: Any?, property: KProperty<*>): T = state.value
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+            state.value = value
+            sp.edit().apply { write(key, value) }.apply()
+        }
+    }
+
+    private fun bool(k: String, d: Boolean) = pref(k, d, { a, b -> getBoolean(a, b) }, { a, b -> putBoolean(a, b) })
+    private fun int(k: String, d: Int) = pref(k, d, { a, b -> getInt(a, b) }, { a, b -> putInt(a, b) })
+    private fun string(k: String, d: String) = pref(k, d, { a, b -> getString(a, b) ?: b }, { a, b -> putString(a, b) })
+
+    /** Package name of the selected icon pack, or "" for system icons. */
+    var iconPack by string("icon_pack", "")
+    var showIcons by bool("show_icons", true)
+    var iconSizeDp by int("icon_size", 36)
+    var labelSizeSp by int("label_size", 22)
+    var railOnRight by bool("rail_right", true)
+    /** An invisible strip on the other edge also scrolls the alphabet bar, for either hand. */
+    var railBothSides by bool("rail_both", true)
+    var swapScreens by bool("swap_screens", false)
+    var widgetsInSingle by bool("widgets_single", true)
+    var actionButton by bool("action_button", true)
+    var compactRail by bool("compact_rail", true)
+    var followUncoveredScreen by bool("follow_uncovered", true)
+    private var tapActionName by string("tap_action", DuetAction.SEARCH.name)
+    var tapApp by string("tap_app", "")
+    private var swipeActionName by string("swipe_action", DuetAction.NOTIFICATIONS.name)
+    var swipeApp by string("swipe_app", "")
+    private var fontName by string("font", FontChoice.DEFAULT.name)
+    /** Bumped whenever a new custom font file is imported, so it gets reloaded. */
+    var customFontVersion by int("custom_font_version", 0)
+    /** Swipe an app sideways to choose which screen it opens on. */
+    var swipeToPickScreen by bool("swipe_pick_screen", true)
+    private var dualLayoutName by string("dual_layout", DualLayout.HOME_AND_LIST.name)
+    private var favoritesRaw by string("favorites", "")
+    private var hiddenRaw by string("hidden", "")
+    private var widgetsRaw by string("widgets", "")
+
+    var dualLayout: DualLayout
+        get() = DualLayout.entries.firstOrNull { it.name == dualLayoutName } ?: DualLayout.HOME_AND_LIST
+        set(v) { dualLayoutName = v.name }
+
+    var font: FontChoice
+        get() = FontChoice.entries.firstOrNull { it.name == fontName } ?: FontChoice.DEFAULT
+        set(v) { fontName = v.name }
+
+    var tapAction: DuetAction
+        get() = DuetAction.entries.firstOrNull { it.name == tapActionName } ?: DuetAction.SEARCH
+        set(v) { tapActionName = v.name }
+
+    var swipeAction: DuetAction
+        get() = DuetAction.entries.firstOrNull { it.name == swipeActionName } ?: DuetAction.NOTIFICATIONS
+        set(v) { swipeActionName = v.name }
+
+    var favorites: List<String>
+        get() = favoritesRaw.split('\n').filter { it.isNotBlank() }
+        set(v) { favoritesRaw = v.distinct().joinToString("\n") }
+
+    var hidden: Set<String>
+        get() = hiddenRaw.split('\n').filter { it.isNotBlank() }.toSet()
+        set(v) { hiddenRaw = v.joinToString("\n") }
+
+    var widgets: List<WidgetEntry>
+        get() = widgetsRaw.split(',').mapNotNull { part ->
+            val p = part.split(':')
+            val id = p.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
+            WidgetEntry(id, p.getOrNull(1)?.toIntOrNull() ?: 180)
+        }
+        set(v) { widgetsRaw = v.joinToString(",") { "${it.id}:${it.heightDp}" } }
+
+    fun toggleFavorite(key: String) {
+        favorites = if (key in favorites) favorites - key else favorites + key
+    }
+
+    fun moveFavorite(key: String, delta: Int) {
+        val list = favorites.toMutableList()
+        val i = list.indexOf(key)
+        val j = i + delta
+        if (i < 0 || j !in list.indices) return
+        list.add(j, list.removeAt(i))
+        favorites = list
+    }
+}

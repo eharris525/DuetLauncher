@@ -1,0 +1,17 @@
+<resources>
+    <color name="settings_bg">#FF121316</color>
+    <color name="icon_bg">#FF1E2A38</color>
+
+    <style name="Theme.Duet" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Duet.Settings" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/settings_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
