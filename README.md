@@ -19,7 +19,11 @@ A minimal, list-based Android home screen built for the Surface Duo 2's two scre
 - **Swipe to pick a screen:** swipe an app left or right to open it on that screen
   (Settings → Apps on one screen).
 - **Alphabet bar from either edge:** the bar shows on one side, and you can slide along the
-  other edge too.
+  other edge too. The apps for the letter under your finger sit in the middle of the screen.
+- **Tapping apps:** opens on the left screen when both are free, or next to the app that's
+  already open.
+- **Styles:** Liquid glass, Frosted, Solid, Outline or Minimal, plus an accent colour
+  (Settings → Style).
 - **Fonts:** pick a built-in Android font or load your own .ttf / .otf (Settings → Font).
 - Long-press an app to favorite, reorder, hide, open App info, or uninstall. Search sits at the top of the list.
 

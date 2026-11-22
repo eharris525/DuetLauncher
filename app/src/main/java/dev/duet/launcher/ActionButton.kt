@@ -107,9 +107,9 @@ fun DuetActionButton(activity: MainActivity, modifier: Modifier = Modifier) {
             .offset { IntOffset(0, lift.value.roundToInt()) }
             .scale(press.value)
             .size(56.dp)
-            .shadow(8.dp, CircleShape)
+            .then(if (DuetApp.instance.prefs.surfaceStyle == SurfaceStyle.MINIMAL) Modifier else Modifier.shadow(8.dp, CircleShape))
             .clip(CircleShape)
-            .background(Color(0x991B1C20))
+            .then(if (DuetApp.instance.prefs.surfaceStyle == SurfaceStyle.LIQUID_GLASS) Modifier.background(Color(0x991B1C20)) else Modifier)
             .glass(CircleShape)
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -146,10 +146,11 @@ fun DuetActionButton(activity: MainActivity, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         // Two panes and a hinge — the Duet glyph.
+        val tint = accent
         Canvas(Modifier.size(22.dp)) {
             val paneW = size.width * 0.4f
             val r = CornerRadius(size.width * 0.08f)
-            drawRoundRect(Color(0xFF8AB4F8), Offset.Zero, Size(paneW, size.height), r)
+            drawRoundRect(tint, Offset.Zero, Size(paneW, size.height), r)
             drawRoundRect(Color.White, Offset(size.width - paneW, 0f), Size(paneW, size.height), r)
         }
     }

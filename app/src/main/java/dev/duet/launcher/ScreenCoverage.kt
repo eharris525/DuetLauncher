@@ -82,6 +82,16 @@ object ScreenCoverage {
 
     // --- Launching onto a screen -------------------------------------------------------
 
+    /**
+     * Where a tapped app goes: the left (top) screen when both are free; next to an app that's
+     * already open otherwise, so two apps sit side by side.
+     */
+    fun tapTarget(): Covered = when (covered) {
+        Covered.FIRST -> Covered.SECOND
+        Covered.SECOND -> Covered.FIRST
+        Covered.NONE -> Covered.FIRST
+    }
+
     /** [target]'s rect while spanned, else null. */
     fun boundsOf(target: Covered): Rect? {
         val g = geometry ?: return null

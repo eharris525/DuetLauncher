@@ -63,6 +63,8 @@ class Prefs(context: Context) {
     private var swipeActionName by string("swipe_action", DuetAction.NOTIFICATIONS.name)
     var swipeApp by string("swipe_app", "")
     private var fontName by string("font", FontChoice.DEFAULT.name)
+    private var surfaceStyleName by string("surface_style", SurfaceStyle.LIQUID_GLASS.name)
+    private var accentName by string("accent", AccentColor.BLUE.name)
     /** Bumped whenever a new custom font file is imported, so it gets reloaded. */
     var customFontVersion by int("custom_font_version", 0)
     /** Swipe an app sideways to choose which screen it opens on. */
@@ -75,6 +77,14 @@ class Prefs(context: Context) {
     var dualLayout: DualLayout
         get() = DualLayout.entries.firstOrNull { it.name == dualLayoutName } ?: DualLayout.HOME_AND_LIST
         set(v) { dualLayoutName = v.name }
+
+    var surfaceStyle: SurfaceStyle
+        get() = SurfaceStyle.entries.firstOrNull { it.name == surfaceStyleName } ?: SurfaceStyle.LIQUID_GLASS
+        set(v) { surfaceStyleName = v.name }
+
+    var accent: AccentColor
+        get() = AccentColor.entries.firstOrNull { it.name == accentName } ?: AccentColor.BLUE
+        set(v) { accentName = v.name }
 
     var font: FontChoice
         get() = FontChoice.entries.firstOrNull { it.name == fontName } ?: FontChoice.DEFAULT

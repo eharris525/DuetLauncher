@@ -108,11 +108,10 @@ class AppRepository(private val ctx: Context) {
     }
 
     /**
-     * A tap: opens [app] on the screen opposite the touch (the Duo's own rule for new apps),
-     * made explicit so an app that's already running doesn't reopen on its old screen and
-     * leave the launcher guessing which screen is free.
+     * A tap: see [ScreenCoverage.tapTarget]. Always explicit, so an app that's already running
+     * doesn't reopen on its old screen and leave the launcher guessing which screen is free.
      */
-    fun launch(app: AppInfo) = launchOn(app, ScreenCoverage.lastTouchScreen.opposite())
+    fun launch(app: AppInfo) = launchOn(app, ScreenCoverage.tapTarget())
 
     /**
      * Opens [app] on a chosen screen while the launcher is spanned, by asking for that

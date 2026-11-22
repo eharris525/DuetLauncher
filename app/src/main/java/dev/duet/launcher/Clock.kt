@@ -195,8 +195,8 @@ private fun ClockPill(activity: MainActivity) {
                 .glass(pill)
                 .combinedClickable(
                     onClick = {
-                        // Like tapping an app: opens on the screen opposite the touch.
-                        DuetApp.instance.apps.startOn(Intent(AlarmClock.ACTION_SHOW_ALARMS), ScreenCoverage.lastTouchScreen.opposite(), asApp = true)
+                        // Same placement as tapping an app.
+                        DuetApp.instance.apps.startOn(Intent(AlarmClock.ACTION_SHOW_ALARMS), ScreenCoverage.tapTarget(), asApp = true)
                     },
                     onLongClick = { menu = true },
                 )

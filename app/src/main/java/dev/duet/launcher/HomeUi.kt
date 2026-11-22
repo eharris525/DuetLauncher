@@ -225,7 +225,7 @@ private fun AppsPane(
             },
             onDrag = { fraction ->
                 activeLetter = LETTERS[letterSlot(fraction)]
-                follower.targetPx = railGeometry.targetFor(fraction)
+                follower.fraction = fraction
             },
             onRelease = {
                 activeLetter = null
@@ -265,7 +265,8 @@ private fun AppsPane(
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = activeLetter != null,
-                modifier = Modifier.align(Alignment.Center),
+                // Beside the bar rather than in the middle, where the letter's apps now land.
+                modifier = Modifier.align(if (railLeft) Alignment.CenterStart else Alignment.CenterEnd).padding(horizontal = 20.dp),
                 enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.7f),
                 exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.85f),
             ) {
@@ -325,17 +326,25 @@ private class ListGeometry(rows: List<ListRow>, m: RowMetrics) {
     }
 
     /** Continuous: moves through each letter's section as the finger moves through that letter's slot. */
-    fun targetFor(fraction: Float): Float {
-        if (sectionStarts.isEmpty()) return 0f
+    /**
+     * Scroll position that centres the letter under the finger: its whole group of apps sits
+     * in the vertical middle of a [viewport]-tall list. A group too tall to fit scrolls through
+     * as the finger moves down that letter.
+     */
+    fun centredScroll(fraction: Float, viewport: Float): Float {
+        if (sectionStarts.isEmpty() || viewport <= 0f) return 0f
         val slot = (fraction.coerceIn(0f, 0.9999f) * LETTERS.length)
         val li = slot.toInt()
-        val frac = slot - li
-        val k = sectionLetters.indexOfFirst { it >= li }
-        if (k < 0) return total.toFloat()
-        val start = sectionStarts[k]
-        if (sectionLetters[k] != li) return start.toFloat()
-        val end = sectionStarts.getOrNull(k + 1) ?: total
-        return start + frac * (end - start)
+        var k = sectionLetters.indexOfFirst { it >= li }
+        if (k < 0) k = sectionStarts.lastIndex
+        val frac = if (sectionLetters[k] == li) slot - li else 0f
+        val start = sectionStarts[k].toFloat()
+        val end = (sectionStarts.getOrNull(k + 1) ?: total).toFloat()
+        val len = end - start
+        val margin = viewport * 0.08f
+        val y = if (len <= viewport - 2 * margin) start + len / 2f - viewport / 2f
+        else start - margin + frac * (len - viewport + 2 * margin)
+        return y.coerceAtLeast(0f)
     }
 
     fun position(index: Int, offset: Int): Float = offsets[index.coerceIn(0, offsets.lastIndex)] + offset.toFloat()
@@ -348,11 +357,12 @@ private class ListGeometry(rows: List<ListRow>, m: RowMetrics) {
 }
 
 /**
- * Chases [targetPx] every frame with exponential smoothing, so the list glides fluidly
+ * Chases the scroll position for [fraction] every frame with exponential smoothing, so the list glides fluidly
  * under the finger instead of restarting an animation at each letter.
  */
 private class RailFollower(private val state: LazyListState) {
-    var targetPx by mutableFloatStateOf(0f)
+    /** Finger position along the bar, 0 (top) to 1 (bottom). */
+    var fraction by mutableFloatStateOf(0f)
     var dragging = false
     var geometry: ListGeometry? = null
     private var job: Job? = null
@@ -364,7 +374,7 @@ private class RailFollower(private val state: LazyListState) {
             if (snapFirst) {
                 // List is only just appearing: jump to where the finger is, then follow.
                 withFrameNanos { }
-                val (i, o) = g.locate(targetPx)
+                val (i, o) = g.locate(scrollFor(g))
                 state.scrollToItem(i, o)
             }
             state.scroll(MutatePriority.UserInput) {
@@ -376,7 +386,7 @@ private class RailFollower(private val state: LazyListState) {
                     val geo = geometry ?: break
                     if (state.layoutInfo.totalItemsCount == 0) continue
                     val current = geo.position(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
-                    val error = targetPx - current
+                    val error = scrollFor(geo) - current
                     if (!dragging && abs(error) < 1f) break
                     val consumed = scrollBy(error * (1f - exp(-dt / FOLLOW_TAU_MS)))
                     if (!dragging && abs(consumed) < 0.5f) break // hit the end of the list
@@ -384,6 +394,9 @@ private class RailFollower(private val state: LazyListState) {
             }
         }
     }
+
+    private fun scrollFor(g: ListGeometry): Float =
+        g.centredScroll(fraction, state.layoutInfo.viewportSize.height.toFloat())
 
     private companion object { const val FOLLOW_TAU_MS = 55f }
 }
@@ -521,7 +534,8 @@ private fun AppList(
         if (apps.isEmpty() && query.isNotBlank()) {
             item { Text("No apps match \"$query\"", style = OnWallpaper, modifier = Modifier.padding(16.dp)) }
         }
-        item { Spacer(Modifier.height(48.dp)) }
+        // Room to bring the last letters up to the middle of the screen from the alphabet bar.
+        item { Spacer(Modifier.fillParentMaxHeight(0.5f)) }
     }
 }
 
@@ -649,7 +663,7 @@ private fun AlphabetRail(
                     translationX = (if (onLeft) 22.dp else (-22).dp).toPx() * highlight
                 },
                 color = when {
-                    c == active -> Color(0xFF8AB4F8)
+                    c == active -> accent
                     c in available -> Color.White.copy(alpha = 0.85f)
                     else -> Color.White.copy(alpha = 0.25f)
                 },

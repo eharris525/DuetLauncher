@@ -63,8 +63,10 @@ fun DuetTheme(content: @Composable () -> Unit) {
     val version = prefs.customFontVersion
     val family = remember(choice, version) { choice.family(ctx) }
     val typography = remember(family) { family?.let { Typography().withFamily(it) } ?: Typography() }
+    val accentColor = prefs.accent.color
+    val scheme = remember(accentColor) { Scheme.copy(primary = accentColor) }
     CompositionLocalProvider(LocalDuetFont provides family) {
-        MaterialTheme(colorScheme = Scheme, typography = typography, content = content)
+        MaterialTheme(colorScheme = scheme, typography = typography, content = content)
     }
 }
 

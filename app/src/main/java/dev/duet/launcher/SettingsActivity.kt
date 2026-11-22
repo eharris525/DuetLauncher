@@ -12,7 +12,14 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -130,6 +137,32 @@ private fun SettingsScreen(activity: SettingsActivity) {
             item { SwitchRow("Show icons", prefs.showIcons) { prefs.showIcons = it } }
             item { SliderRow("Icon size", prefs.iconSizeDp, 24..64, "dp") { prefs.iconSizeDp = it } }
             item { SliderRow("Label size", prefs.labelSizeSp, 14..34, "sp") { prefs.labelSizeSp = it } }
+
+            item { Section("Style") }
+            items(SurfaceStyle.entries) { style ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { prefs.surfaceStyle = style }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = prefs.surfaceStyle == style, onClick = { prefs.surfaceStyle = style })
+                    Column(Modifier.padding(start = 8.dp)) {
+                        Text(style.title)
+                        Text(style.summary, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                    }
+                }
+            }
+            item {
+                Text("Accent colour · ${prefs.accent.title}", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AccentColor.entries.forEach { a ->
+                        Box(
+                            Modifier.size(36.dp).clip(CircleShape).background(a.color)
+                                .border(if (prefs.accent == a) 3.dp else 0.dp, Color.White, CircleShape)
+                                .clickable { prefs.accent = a }
+                        )
+                    }
+                }
+            }
 
             item { Section("Font") }
             item { ActionRow("Font", prefs.font.title) { fontDialog = true } }
