@@ -72,6 +72,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -427,10 +428,13 @@ private fun HomeColumn(
             }
             Column(Modifier.then(if (favorites.isNotEmpty()) Modifier.glide("favorites") else Modifier).padding(vertical = 32.dp)) {
                 favorites.forEachIndexed { i, app ->
-                    AppRow(
-                        app, isFavorite = true, large = true,
-                        canMoveUp = i > 0, canMoveDown = i < favorites.lastIndex,
-                    )
+                    // Keyed so each row (icon, menu) stays with its app when favorites are reordered.
+                    key(app.key) {
+                        AppRow(
+                            app, isFavorite = true, large = true,
+                            canMoveUp = i > 0, canMoveDown = i < favorites.lastIndex,
+                        )
+                    }
                 }
                 if (favorites.isEmpty() && !showWidgets) {
                     Text(
@@ -601,8 +605,10 @@ fun AppIcon(app: AppInfo, sizeDp: Int) {
     val repo = DuetApp.instance.apps
     val px = with(LocalDensity.current) { sizeDp.dp.roundToPx() }
     val pack = prefs.iconPack
+    // Always re-resolve when the app changes: produceState keeps the previous value across key
+    // changes, so a row that now shows a different app would otherwise keep the old icon.
     val bmp by produceState(repo.peekIcon(app, pack, px), app.key, pack, px) {
-        if (value == null) value = repo.icon(app, pack, px)
+        value = repo.peekIcon(app, pack, px) ?: repo.icon(app, pack, px)
     }
     Box(Modifier.size(sizeDp.dp)) { bmp?.let { Image(it, contentDescription = null, modifier = Modifier.fillMaxSize()) } }
 }
