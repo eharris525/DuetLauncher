@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,7 +69,9 @@ fun WidgetColumn(activity: MainActivity, modifier: Modifier = Modifier) {
         widgets.forEachIndexed { index, entry ->
             key(entry.id) {
                 Box(Modifier.fillMaxWidth().height(entry.heightDp.dp)) {
-                    HostedWidget(activity, entry.id, Modifier.fillMaxSize())
+                    val builtIn = if (entry.id < 0) prefs.builtin(entry.id) else null
+                    if (builtIn != null) BuiltInWidget(activity, builtIn, Modifier.fillMaxSize())
+                    else HostedWidget(activity, entry.id, Modifier.fillMaxSize())
                     if (ui.editWidgets) {
                         WidgetEditOverlay(
                             activity, entry,
@@ -79,6 +82,7 @@ fun WidgetColumn(activity: MainActivity, modifier: Modifier = Modifier) {
                 }
             }
         }
+        ui.configureWidget?.let { id -> BuiltInWidgetSettings(activity, id) { ui.configureWidget = null } }
         if (ui.editWidgets) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = { ui.pickerOpen = true }) { Text("Add widget") }
@@ -135,6 +139,7 @@ private fun WidgetEditOverlay(activity: MainActivity, entry: WidgetEntry, canMov
                 EditButton("▼", enabled = canMoveDown) { activity.moveWidget(entry.id, 1) }
                 EditButton("−") { activity.resizeWidget(entry.id, -24) }
                 EditButton("+") { activity.resizeWidget(entry.id, 24) }
+                if (entry.id < 0) EditButton("⚙") { activity.ui.configureWidget = entry.id }
                 EditButton("✕") { activity.removeWidget(entry.id) }
             }
         }
@@ -167,7 +172,8 @@ fun WidgetPicker(activity: MainActivity, onDismiss: () -> Unit) {
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
-            Modifier.fillMaxWidth(0.92f).fillMaxSize(0.88f),
+            // Capped: on the Duo a dialog is placed on one screen but measured against both.
+            Modifier.widthIn(max = 500.dp).fillMaxWidth(0.92f).fillMaxSize(0.88f),
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
         ) {
@@ -175,6 +181,20 @@ fun WidgetPicker(activity: MainActivity, onDismiss: () -> Unit) {
                 Text("Add a widget", style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(12.dp))
                 LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "duet-h") {
+                        Text("Duet widgets", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                        Text("Follow your style, accent colour and font", fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                    }
+                    items(BuiltInKind.entries, key = { "duet-" + it.name }) { kind ->
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .clickable { onDismiss(); activity.addBuiltIn(kind) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp)
+                        ) {
+                            Text(kind.title)
+                            Text(kind.summary, fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                        }
+                    }
                     groups.forEach { (appLabel, providers) ->
                         item(key = "h:$appLabel") {
                             Text(

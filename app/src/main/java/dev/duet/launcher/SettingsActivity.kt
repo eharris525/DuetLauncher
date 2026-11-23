@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -108,6 +110,12 @@ private fun SettingsScreen(activity: SettingsActivity) {
     var packDialog by remember { mutableStateOf(false) }
     var hiddenDialog by remember { mutableStateOf(false) }
     var fontDialog by remember { mutableStateOf(false) }
+    var glanceDialog by remember { mutableStateOf(false) }
+    var glanceAccess by remember { mutableStateOf(GlanceMirrorService.hasAccess(ctx)) }
+    LifecycleResumeEffect(Unit) {
+        glanceAccess = GlanceMirrorService.hasAccess(ctx)
+        onPauseOrDispose { }
+    }
     /** Which gesture's action is being chosen: "tap" or "swipe" (null = no dialog). */
     var actionDialog by remember { mutableStateOf<String?>(null) }
     var appPickerFor by remember { mutableStateOf<String?>(null) }
@@ -211,6 +219,33 @@ private fun SettingsScreen(activity: SettingsActivity) {
                 ) { runCatching { ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } }
             }
 
+            item { Section("Glance Bar") }
+            item {
+                SwitchRow(
+                    "Show more apps on the Glance Bar",
+                    prefs.glanceMirror,
+                    "While the Duo is closed, apps you pick light up on the Glance Bar like texts do. " +
+                        "Press the power button with the Duo closed to see them.",
+                ) {
+                    prefs.glanceMirror = it
+                    if (!it) GlanceMirrorService.clearNow()
+                }
+            }
+            if (prefs.glanceMirror && !glanceAccess) item {
+                ActionRow("Allow notification access", "Needed to see which apps have notifications. Turn on \"Duet Glance Bar\".") {
+                    runCatching { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                }
+            }
+            if (prefs.glanceMirror) item {
+                val n = prefs.glanceApps.size
+                ActionRow("Apps and colours", if (n == 0) "None chosen yet" else "$n app${if (n == 1) "" else "s"}") { glanceDialog = true }
+            }
+            item {
+                ActionRow("Built-in Glance Bar settings", "Settings → Surface Duo features → Glance Bar: calls, texts, battery and volume") {
+                    runCatching { ctx.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                }
+            }
+
             item { Section("Duet action button") }
             item { SwitchRow("Show the button", prefs.actionButton, "Round button in the bottom-right corner") { prefs.actionButton = it } }
             item { ActionRow("Tap", prefs.tapAction.describe(prefs.tapApp)) { actionDialog = "tap" } }
@@ -245,6 +280,54 @@ private fun SettingsScreen(activity: SettingsActivity) {
                             "No icon packs installed. Any pack built for Nova, ADW or Apex launchers will show up here.",
                             fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 8.dp),
                         )
+                    }
+                }
+            },
+        )
+    }
+
+    if (glanceDialog) {
+        val apps = remember(repo.all) { repo.all.distinctBy { it.component.packageName } }
+        AlertDialog(
+            onDismissRequest = { glanceDialog = false },
+            confirmButton = { TextButton(onClick = { glanceDialog = false }) { Text("Done") } },
+            title = { Text("Glance Bar apps") },
+            text = {
+                Column {
+                    Text(
+                        "Tick an app to show it on the Glance Bar. Tap its dot to change the colour " +
+                            "(the first option uses the app's own colour). Calls, texts and Teams already show.",
+                        fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    LazyColumn {
+                        items(apps, key = { it.component.packageName }) { app ->
+                            val pkg = app.component.packageName
+                            val on = pkg in prefs.glanceApps
+                            val color = prefs.glanceColorFor(pkg)
+                            Row(
+                                Modifier.fillMaxWidth().clickable { prefs.setGlanceApp(pkg, !on) }.padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = on, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                AppIcon(app, 28)
+                                Spacer(Modifier.width(12.dp))
+                                Text(app.label, modifier = Modifier.weight(1f))
+                                if (on) {
+                                    val choices = listOf<Int?>(null) + AccentColor.entries.map { it.color.toArgb() }
+                                    Box(
+                                        Modifier.size(28.dp).clip(CircleShape)
+                                            .background(color?.let { Color(it) } ?: Color.Transparent)
+                                            .border(2.dp, Color.White.copy(alpha = if (color == null) 0.7f else 0.3f), CircleShape)
+                                            .clickable {
+                                                val next = choices[(choices.indexOf(color) + 1) % choices.size]
+                                                prefs.setGlanceApp(pkg, true, next)
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) { if (color == null) Text("A", fontSize = 12.sp) }
+                                }
+                            }
+                        }
                     }
                 }
             },

@@ -3,4 +3,5 @@
     <string name="settings_name">Duet Settings</string>
     <string name="watcher_label">Duet screen detection</string>
     <string name="watcher_description">Lets Duet Launcher see which screen an app is open on, so it can move to the other screen. It only reads where app windows are, never what\'s in them.</string>
+    <string name="glance_label">Duet Launcher (Glance Bar and music widget)</string>
 </resources>

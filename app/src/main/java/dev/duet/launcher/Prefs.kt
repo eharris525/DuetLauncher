@@ -69,10 +69,15 @@ class Prefs(context: Context) {
     var customFontVersion by int("custom_font_version", 0)
     /** Swipe an app sideways to choose which screen it opens on. */
     var swipeToPickScreen by bool("swipe_pick_screen", true)
+    /** Re-post chosen apps' notifications so they show on the Glance Bar while closed. */
+    var glanceMirror by bool("glance_mirror", false)
+    /** "pkg=colour" lines; colour is an ARGB int, or empty to use the app's own colour. */
+    private var glanceAppsRaw by string("glance_apps", "")
     private var dualLayoutName by string("dual_layout", DualLayout.HOME_AND_LIST.name)
     private var favoritesRaw by string("favorites", "")
     private var hiddenRaw by string("hidden", "")
     private var widgetsRaw by string("widgets", "")
+    private var builtinRaw by string("builtin_widgets", "[]")
 
     var dualLayout: DualLayout
         get() = DualLayout.entries.firstOrNull { it.name == dualLayoutName } ?: DualLayout.HOME_AND_LIST
@@ -113,6 +118,30 @@ class Prefs(context: Context) {
             WidgetEntry(id, p.getOrNull(1)?.toIntOrNull() ?: 180)
         }
         set(v) { widgetsRaw = v.joinToString(",") { "${it.id}:${it.heightDp}" } }
+
+    private val glanceEntries: Map<String, Int?>
+        get() = glanceAppsRaw.split('\n').filter { '=' in it }.associate {
+            val (pkg, c) = it.split('=', limit = 2); pkg to c.toIntOrNull()
+        }
+
+    val glanceApps: Set<String> get() = glanceEntries.keys
+
+    /** Chosen colour, or null for the app's own notification colour. */
+    fun glanceColorFor(pkg: String): Int? = glanceEntries[pkg]
+
+    fun setGlanceApp(pkg: String, on: Boolean, color: Int? = glanceEntries[pkg]) {
+        val m = glanceEntries.toMutableMap()
+        if (on) m[pkg] = color else m.remove(pkg)
+        glanceAppsRaw = m.entries.joinToString("\n") { "${it.key}=${it.value ?: ""}" }
+    }
+
+    /** Settings of the built-in widgets (their entries in [widgets] have the same negative ids). */
+    var builtins: List<BuiltInConfig>
+        get() = BuiltInConfig.parseList(builtinRaw)
+        set(v) { builtinRaw = BuiltInConfig.encodeList(v) }
+
+    fun builtin(id: Int) = builtins.firstOrNull { it.id == id }
+    fun updateBuiltin(c: BuiltInConfig) { builtins = builtins.map { if (it.id == c.id) c else it } }
 
     fun toggleFavorite(key: String) {
         favorites = if (key in favorites) favorites - key else favorites + key

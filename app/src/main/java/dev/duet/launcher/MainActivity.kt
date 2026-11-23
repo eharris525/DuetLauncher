@@ -29,6 +29,8 @@ class UiState {
     var query by mutableStateOf("")
     var editWidgets by mutableStateOf(false)
     var pickerOpen by mutableStateOf(false)
+    /** Id of the built-in widget whose settings are open, or null. */
+    var configureWidget by mutableStateOf<Int?>(null)
     /** Bumped to ask the app list to focus its search field and show the keyboard. */
     var searchRequest by mutableIntStateOf(0)
 
@@ -229,11 +231,31 @@ class MainActivity : ComponentActivity() {
     }
 
     fun removeWidget(id: Int) {
-        widgetViews.remove(id)
-        sentWidgetSizes.remove(id)
-        widgetHost.deleteAppWidgetId(id)
+        if (id < 0) {
+            prefs.builtins = prefs.builtins.filterNot { it.id == id }
+        } else {
+            widgetViews.remove(id)
+            sentWidgetSizes.remove(id)
+            widgetHost.deleteAppWidgetId(id)
+        }
         prefs.widgets = prefs.widgets.filterNot { it.id == id }
     }
+
+    /** Adds one of the launcher's own widgets (negative id), and asks for calendar access if it needs it. */
+    fun addBuiltIn(kind: BuiltInKind) {
+        val id = minOf(0, prefs.widgets.minOfOrNull { it.id } ?: 0, prefs.builtins.minOfOrNull { it.id } ?: 0) - 1
+        prefs.builtins = prefs.builtins + BuiltInConfig(id, kind)
+        prefs.widgets = prefs.widgets + WidgetEntry(id, kind.defaultHeightDp)
+        if ((kind == BuiltInKind.CALENDAR || kind == BuiltInKind.AGENDA) && !CalendarData.hasPermission(this)) requestCalendarAccess()
+        ui.editWidgets = true
+        if (kind == BuiltInKind.WEATHER) ui.configureWidget = id // needs a location first
+    }
+
+    private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) CalendarPermission.grants++
+    }
+
+    fun requestCalendarAccess() = calendarPermission.launch(android.Manifest.permission.READ_CALENDAR)
 
     fun resizeWidget(id: Int, deltaDp: Int) {
         prefs.widgets = prefs.widgets.map {

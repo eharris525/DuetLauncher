@@ -58,10 +58,14 @@ fun DuetAction.describe(appKey: String): String =
  * Runs [action]. Anything it opens goes to the screen the button was pressed on (the screen
  * of the touch), and the launcher moves over to the other screen.
  */
-fun performAction(activity: MainActivity, action: DuetAction, appKey: String) {
+fun performAction(
+    activity: MainActivity,
+    action: DuetAction,
+    appKey: String,
+    here: Covered = ScreenCoverage.lastTouchScreen,
+) {
     val ui = activity.ui
     val apps = DuetApp.instance.apps
-    val here = ScreenCoverage.lastTouchScreen
     fun start(intent: Intent, asApp: Boolean = false) = apps.startOn(intent, here, asApp)
     when (action) {
         DuetAction.NONE -> Unit

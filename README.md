@@ -11,6 +11,11 @@ A minimal, list-based Android home screen built for the Surface Duo 2's two scre
 - **Spanned:** two layouts (Settings → Layout), optional swap, panes kept clear of the hinge.
 - **Icon packs:** any ADW / Nova / Apex-style pack (`appfilter.xml`). Apps the pack
   doesn't cover fall back to system icons.
+- **Duet widgets:** built-in Calendar, Upcoming events, Weather (Open-Meteo), Music,
+  Battery and Next alarm widgets that follow your style, accent and font. Each has its own
+  tap action and options (⚙ in Edit widgets).
+- **Glance Bar:** pick extra apps and colours to light up the Glance Bar while the Duo is
+  closed (Settings → Glance Bar; needs notification access).
 - **Widgets:** long-press the clock → Add / Edit widgets. In edit mode you can reorder,
   resize, and remove them.
 - **Apps on one screen:** when an app opens on one screen, the launcher switches to its
