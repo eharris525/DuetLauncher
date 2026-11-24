@@ -38,24 +38,34 @@ sealed interface ScreenMode {
 
     /** [hinge] is in window pixels; [sideBySide] is true when the screens sit left/right. */
     data class Dual(val hinge: Rect, val sideBySide: Boolean) : ScreenMode
+
+    /**
+     * One continuous screen that folds (Pixel Fold, Galaxy Z Fold, ...), open. Laid out like
+     * [Dual] around the fold line, but apps open full screen or in split screen (see [FoldSplit]).
+     */
+    data class Unfolded(val asDual: Dual) : ScreenMode
 }
 
 @Composable
 fun rememberScreenMode(activity: Activity): ScreenMode {
     val flow = remember(activity) { WindowInfoTracker.getOrCreate(activity).windowLayoutInfo(activity) }
     val info by flow.collectAsStateWithLifecycle(initialValue = null)
-    val fold = info?.displayFeatures
-        ?.filterIsInstance<FoldingFeature>()
-        ?.firstOrNull { it.isSeparating }
-        ?: return ScreenMode.Single
-    return ScreenMode.Dual(
-        hinge = fold.bounds,
-        sideBySide = fold.orientation == FoldingFeature.Orientation.VERTICAL,
-    )
+    val folds = info?.displayFeatures?.filterIsInstance<FoldingFeature>().orEmpty()
+    // The Duo's hinge is a real gap between two screens; a foldable's fold is a line on one screen.
+    fun FoldingFeature.occluding() =
+        occlusionType == FoldingFeature.OcclusionType.FULL || (bounds.width() > 0 && bounds.height() > 0)
+    folds.firstOrNull { it.isSeparating && it.occluding() }?.let {
+        return ScreenMode.Dual(hinge = it.bounds, sideBySide = it.orientation == FoldingFeature.Orientation.VERTICAL)
+    }
+    folds.firstOrNull { !it.occluding() }?.let {
+        return ScreenMode.Unfolded(ScreenMode.Dual(hinge = it.bounds, sideBySide = it.orientation == FoldingFeature.Orientation.VERTICAL))
+    }
+    return ScreenMode.Single
 }
 
 fun ScreenMode.describe(): String = when (this) {
     ScreenMode.Single -> "Single screen"
+    is ScreenMode.Unfolded -> "Foldable, open (tap: full screen, swipe: split screen)"
     is ScreenMode.Dual -> if (sideBySide) "Spanned across both screens (side by side)"
     else "Spanned across both screens (top and bottom)"
 }
