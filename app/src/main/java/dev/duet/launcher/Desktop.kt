@@ -308,8 +308,48 @@ object DesktopMode {
 
     fun click() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        // Clicking a window's title-bar ✕ closes the app completely, not just its window.
+        val hit = windows.firstOrNull { it.bounds.contains(pointerX.toInt(), pointerY.toInt()) }
+        if (hit != null && onCloseButton(hit, pointerX, pointerY)) {
+            // The ✕'s tap target is smaller than it looks; a click near it goes to its centre.
+            closeWindow(hit)
+            afterClose(hit.pkg)
+            return
+        }
         gesture(GestureDescription.StrokeDescription(point(pointerX, pointerY), 0, 40))
     }
+
+    private fun onCloseButton(w: AppWindow, x: Float, y: Float): Boolean {
+        val dp = density()
+        val cx = w.bounds.right - CAPTION_CLOSE_DX_DP * dp
+        val cy = w.bounds.top + CAPTION_Y_DP * dp
+        return kotlin.math.abs(x - cx) <= 18 * dp && kotlin.math.abs(y - cy) <= 18 * dp
+    }
+
+    /**
+     * After a window's ✕: once the window is really gone, take the app off the taskbar right
+     * away. (Android keeps its process cached, which uses no CPU and is freed when memory is
+     * needed; other apps aren't allowed to end it.)
+     */
+    private fun afterClose(pkg: String) {
+        if (pkg == app.packageName) return
+        var tries = 0
+        val check = object : Runnable {
+            override fun run() {
+                tries++
+                if (windows.any { it.pkg == pkg }) {
+                    // Not gone yet (or it asked to save first): look again for a few seconds.
+                    if (tries < 8) { refreshRunning(); main.postDelayed(this, 500) }
+                    return
+                }
+                running = running - pkg
+                minimized = minimized - pkg
+                if (fullscreenPkg == pkg) fullscreenPkg = null
+            }
+        }
+        main.postDelayed({ refreshRunning(); main.postDelayed(check, 300) }, 600)
+    }
+
 
     /** A long press: opens context menus, like a right-click. */
     fun longPress() {
@@ -376,14 +416,37 @@ object DesktopMode {
         s.moveTo(scrollX, scrollY)
     }
 
-    fun endScroll() {
-        if (scroll != null) android.util.Log.d(SCROLL_TAG, "up at $scrollX,$scrollY")
-        scroll?.end()
+    /**
+     * Fingers lifted, moving at ([vx], [vy]) display pixels per second. A quick lift ends with a
+     * short flick at that speed, so the app carries on scrolling and slows down by itself
+     * (momentum, like flinging a touchscreen). A slow lift rests first so the page stops dead.
+     */
+    fun endScroll(vx: Float = 0f, vy: Float = 0f) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val speed = kotlin.math.hypot(vx, vy)
+        val fling = speed >= FLING_MIN_DP_S * density()
+        var s = scroll
+        if (s == null && fling && display != null) {
+            // A quick flick that ended before the scroll had touched down: start it now.
+            val (w, h) = size(display!!)
+            scrollX = pointerX.coerceIn(2f, w - 3f); scrollY = pointerY.coerceIn(2f, h - 3f)
+            s = LiveStroke(scrollX, scrollY)
+        }
+        android.util.Log.d(SCROLL_TAG, "up at $scrollX,$scrollY speed=${speed.toInt()}px/s")
+        if (s != null && fling && display != null) {
+            val (w, h) = size(display!!)
+            val t = FLICK_MS / 1000f
+            val fx = (scrollX + vx * t).coerceIn(1f, w - 2f); val fy = (scrollY + vy * t).coerceIn(1f, h - 2f)
+            s.flick(fx, fy, speed)
+        } else s?.end(hold = true)
         scroll = null
         pendingX = 0f; pendingY = 0f
     }
 
     private const val SCROLL_START_DP = 14f
+    /** Slower than this when lifting and the page just stops. */
+    private const val FLING_MIN_DP_S = 250f
+    private const val FLICK_MS = 40
     private const val SCROLL_TAG = "DuetScroll"
 
     /**
@@ -412,6 +475,14 @@ object DesktopMode {
         /** Lifts the finger. With [hold], it rests first so the app sees no fling. */
         fun end(hold: Boolean = false) { ending = true; this.hold = hold; if (!busy) send() }
 
+        /** Final quick move to ([x], [y]) at [speed] px/s, then lift: the app flings from there. */
+        fun flick(x: Float, y: Float, speed: Float) {
+            toX = x; toY = y; flickSpeed = speed; ending = true; hold = false
+            if (!busy) send()
+        }
+
+        private var flickSpeed = 0f
+
         private fun send() {
             if (finished) return
             val now = SystemClock.uptimeMillis()
@@ -422,8 +493,13 @@ object DesktopMode {
                 // A stroke needs some length: wiggle by half a pixel (alternating so it doesn't drift).
                 ex = atX + nudge; nudge = -nudge
             }
-            val last = ending && (!hold || (ex - atX) * (ex - atX) + (ey - atY) * (ey - atY) < 1f)
+            val dist2 = (ex - atX) * (ex - atX) + (ey - atY) * (ey - atY)
+            val last = ending && (!hold || dist2 < 1f)
             if (last && hold) duration = 120 // rest before lifting: velocity drops to zero, no fling
+            if (last && flickSpeed > 0f) {
+                // Time the final move so the app measures the fingers' real speed when they lifted.
+                duration = (kotlin.math.sqrt(dist2) / flickSpeed * 1000f).toLong().coerceIn(12, 80)
+            }
             val path = Path().apply { moveTo(atX, atY); lineTo(ex, ey) }
             val stroke = current?.continueStroke(path, 0, duration, !last)
                 ?: GestureDescription.StrokeDescription(path, 0, duration, !last)
@@ -683,7 +759,7 @@ object DesktopMode {
     fun close(pkg: String) {
         contextMenu = null
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        windows.firstOrNull { it.pkg == pkg }?.let { closeWindow(it) }
+        windows.firstOrNull { it.pkg == pkg }?.let { closeWindow(it); afterClose(pkg) }
     }
 
     private const val CAPTION_CLOSE_DX_DP = 22f

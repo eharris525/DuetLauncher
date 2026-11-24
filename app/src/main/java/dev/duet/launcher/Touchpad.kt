@@ -239,6 +239,27 @@ private class TouchpadView(ctx: Context) : View(ctx) {
     private var dragArmed = false
     private var lastTapUp = 0L
 
+    /** Recent finger positions while scrolling (time, x, y), for the speed at lift-off. */
+    private val samples = ArrayDeque<Triple<Long, Float, Float>>()
+
+    /** Display pixels scrolled per touchpad pixel: about 2.5x the finger's movement, like a laptop touchpad. */
+    private fun scrollGain() = DesktopMode.density() / phoneDensity * 2.5f
+
+    /** Ends a scroll with the fingers' speed over the last moments, so a quick lift keeps gliding. */
+    private fun endScroll() {
+        val now = SystemClock.uptimeMillis()
+        var vx = 0f; var vy = 0f
+        val first = samples.firstOrNull(); val last = samples.lastOrNull()
+        // Fingers that stopped before lifting (no movement in the last 50 ms) don't fling.
+        if (first != null && last != null && last !== first && now - last.first < 50) {
+            val dt = (last.first - first.first).coerceAtLeast(1) / 1000f
+            vx = (last.second - first.second) / dt * scrollGain()
+            vy = (last.third - first.third) / dt * scrollGain()
+        }
+        samples.clear()
+        DesktopMode.endScroll(vx, vy)
+    }
+
     private val holdToDrag = Runnable {
         if (!dragging && !scrolling && maxPointers == 1 && travel < slop) {
             dragging = true
@@ -279,7 +300,7 @@ private class TouchpadView(ctx: Context) : View(ctx) {
                 // Re-anchor on the remaining fingers so the pointer doesn't jump.
                 val rest = (0 until e.pointerCount).filter { it != e.actionIndex }
                 lastX = rest.map { e.getX(it) }.average().toFloat(); lastY = rest.map { e.getY(it) }.average().toFloat()
-                if (e.pointerCount - 1 < 2 && scrolling) { DesktopMode.endScroll(); scrolling = false }
+                if (e.pointerCount - 1 < 2 && scrolling) { endScroll(); scrolling = false }
             }
             MotionEvent.ACTION_MOVE -> {
                 val (x, y) = if (e.pointerCount >= 2) centroid(e) else e.x to e.y
@@ -289,10 +310,11 @@ private class TouchpadView(ctx: Context) : View(ctx) {
                 if (travel > slop) removeCallbacks(holdToDrag)
                 if (e.pointerCount >= 2) {
                     if (travel > slop) {
+                        if (!scrolling) samples.clear()
                         scrolling = true
-                        // About 2.5x the finger's movement, like laptop two-finger scrolling.
-                        val g = DesktopMode.density() / phoneDensity * 2.5f
-                        DesktopMode.scrollBy(dx * g, dy * g)
+                        DesktopMode.scrollBy(dx * scrollGain(), dy * scrollGain())
+                        samples.addLast(Triple(now, x, y))
+                        while (samples.size > 2 && now - samples.first().first > 100) samples.removeFirst()
                     }
                 } else if (maxPointers == 1) {
                     if (dragArmed && !dragging && travel > slop) { dragging = true; DesktopMode.startDrag() }
@@ -306,7 +328,7 @@ private class TouchpadView(ctx: Context) : View(ctx) {
                 val tap = e.actionMasked == MotionEvent.ACTION_UP && travel < slop * 2 && now - downAt < TAP_MS
                 when {
                     dragging -> { DesktopMode.endDrag(); dragging = false }
-                    scrolling -> { DesktopMode.endScroll(); scrolling = false }
+                    scrolling -> { endScroll(); scrolling = false }
                     tap && maxPointers >= 2 -> DesktopMode.longPress()
                     tap -> { DesktopMode.click(); lastTapUp = now; return true }
                 }
