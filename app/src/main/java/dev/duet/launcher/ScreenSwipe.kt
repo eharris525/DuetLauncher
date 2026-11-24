@@ -31,8 +31,7 @@ import kotlin.math.sqrt
 
 /**
  * Swipe an app row left or right to open it on the left or right screen (top / bottom when
- * the Duo is rotated). Only active while the launcher spans both screens, or on an open
- * foldable, where it opens the app in split screen on that side instead.
+ * the Duo is rotated). Only active while the launcher spans both screens.
  */
 class ScreenSwipe internal constructor(
     private val scope: CoroutineScope,
@@ -76,11 +75,8 @@ class ScreenSwipe internal constructor(
         val p = progress
         if (p == 0f) return
         val g = ScreenCoverage.geometry
-        val split = g == null && FoldSplit.canPick
-        val vertical = if (split) !FoldSplit.sideBySide else g != null && !g.sideBySide
+        val vertical = g != null && !g.sideBySide
         val label = when {
-            split && !FoldSplit.canChooseSide -> if (p > 0) "Split screen →" else "← Split screen"
-            split -> if (p > 0) (if (vertical) "Split, bottom ↓" else "Split right →") else (if (vertical) "↑ Split, top" else "← Split left")
             p > 0 -> if (vertical) "Bottom screen →" else "Right screen →"
             else -> if (vertical) "← Top screen" else "← Left screen"
         }
@@ -112,7 +108,7 @@ fun rememberScreenSwipe(enabled: Boolean, onPick: (Covered) -> Unit): ScreenSwip
         detectHorizontalDragGestures(
             onHorizontalDrag = { change, amount ->
                 // Nothing to choose between unless the launcher spans both screens.
-                if (ScreenCoverage.geometry == null && !FoldSplit.canPick) return@detectHorizontalDragGestures
+                if (ScreenCoverage.geometry == null) return@detectHorizontalDragGestures
                 change.consume()
                 swipe.onDrag(amount) { haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
             },

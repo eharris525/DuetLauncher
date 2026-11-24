@@ -119,13 +119,15 @@ class AppRepository(private val ctx: Context) {
      * new tasks — an app already running reopens on whichever screen it was last on.
      */
     fun launchOn(app: AppInfo, target: Covered) {
-        val own = app.user == android.os.Process.myUserHandle()
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-        if (own && FoldSplit.route(intent, target)) return
         val opts = ScreenCoverage.launchOptions(target)
         val bounds = ScreenCoverage.boundsOf(target)
-        val started = if (own) runCatching { ctx.startActivity(intent, opts) }.isSuccess else false
+        val started = if (app.user == android.os.Process.myUserHandle()) runCatching {
+            ctx.startActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED),
+                opts,
+            )
+        }.isSuccess else false
         if (!started) runCatching { launcherApps.startMainActivity(app.component, app.user, bounds, opts) }
     }
 
@@ -138,7 +140,6 @@ class AppRepository(private val ctx: Context) {
         if (intent.component == null) intent.component = pickHandler(intent) ?: return false
         val launch = if (asApp) ctx.packageManager.getLaunchIntentForPackage(intent.component!!.packageName) ?: intent else intent
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-        if (FoldSplit.route(launch, target)) return true
         return runCatching { ctx.startActivity(launch, ScreenCoverage.launchOptions(target)) }.isSuccess
     }
 

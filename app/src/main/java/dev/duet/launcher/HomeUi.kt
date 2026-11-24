@@ -127,15 +127,11 @@ fun LauncherRoot(activity: MainActivity) {
         ScreenCoverage.geometry = (mode as? ScreenMode.Dual)?.let {
             ScreenCoverage.Geometry(it.hinge, it.sideBySide, view.width, view.height)
         }
-        if (!activity.condensed) {
-            FoldSplit.unfolded = mode is ScreenMode.Unfolded
-            (mode as? ScreenMode.Unfolded)?.let { FoldSplit.sideBySide = it.asDual.sideBySide }
-        }
         onDispose { }
     }
     val covered = if (prefs.followUncoveredScreen) ScreenCoverage.covered else Covered.NONE
     val single: @Composable () -> Unit = {
-        AppsPane(activity, visible, favorites, alwaysList = false, showHeader = true, showWidgets = prefs.widgetsInSingle && !activity.condensed)
+        AppsPane(activity, visible, favorites, alwaysList = false, showHeader = true, showWidgets = prefs.widgetsInSingle)
     }
 
     // When the arrangement changes (one screen <-> two, which screen, layout choice), let the
@@ -161,8 +157,7 @@ fun LauncherRoot(activity: MainActivity) {
             mode is ScreenMode.Dual && covered != Covered.NONE ->
                 OneScreenOf(mode, useFirst = covered == Covered.SECOND, content = single)
 
-            mode is ScreenMode.Dual || mode is ScreenMode.Unfolded -> {
-                val dual = (mode as? ScreenMode.Unfolded)?.asDual ?: mode as ScreenMode.Dual
+            mode is ScreenMode.Dual -> {
                 val home: @Composable () -> Unit
                 val other: @Composable () -> Unit
                 when (prefs.dualLayout) {
@@ -175,7 +170,7 @@ fun LauncherRoot(activity: MainActivity) {
                         other = { AppsPane(activity, visible, favorites, alwaysList = false, showHeader = false, showWidgets = false) }
                     }
                 }
-                if (prefs.swapScreens) DualSplit(dual, other, home) else DualSplit(dual, home, other)
+                if (prefs.swapScreens) DualSplit(mode, other, home) else DualSplit(mode, home, other)
             }
         }
       }

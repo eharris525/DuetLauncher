@@ -23,12 +23,6 @@ A minimal, list-based Android home screen built for the Surface Duo 2's two scre
   widgets glide to their new spots.
 - **Swipe to pick a screen:** swipe an app left or right to open it on that screen
   (Settings → Apps on one screen).
-- **Other foldables (Pixel Fold, Galaxy Z Fold, ...):** opened flat, the home screen uses the
-  two-pane layout. A tap opens an app full screen. A swipe opens it in split screen on that
-  side, with a condensed launcher in the other half; apps you open from there replace the
-  other half (it passes back through the home screen for about a second to do that). Needs
-  Android 12L or later. Tested on an Oppo Find N5. On Oppo, OnePlus and realme phones the app
-  always opens on the right, whichever way you swipe.
 - **Alphabet bar from either edge:** the bar shows on one side, and you can slide along the
   other edge too. The apps for the letter under your finger sit in the middle of the screen.
 - **Tapping apps:** opens on the left screen when both are free, or next to the app that's

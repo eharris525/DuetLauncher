@@ -42,10 +42,7 @@ class UiState {
     }
 }
 
-open class MainActivity : ComponentActivity() {
-    /** True for the half-screen launcher shown beside an app in split screen ([SplitHomeActivity]). */
-    open val condensed: Boolean get() = false
-
+class MainActivity : ComponentActivity() {
     lateinit var widgetHost: AppWidgetHost
         private set
     lateinit var widgetManager: AppWidgetManager
@@ -82,8 +79,6 @@ open class MainActivity : ComponentActivity() {
         pendingWidgetId = savedInstanceState?.getInt(KEY_PENDING, -1) ?: -1
         widgetManager = AppWidgetManager.getInstance(this)
         widgetHost = AppWidgetHost(applicationContext, HOST_ID)
-        if (!condensed) FoldSplit.attachHome(this)
-        if (!condensed) splitFromIntent(intent)
         accessibility = getSystemService(AccessibilityManager::class.java)
         accessibility.addAccessibilityStateChangeListener(a11yListener)
         refreshSemanticsMode()
@@ -133,33 +128,21 @@ open class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Only the main home screen hosts system widgets; two hosts with one id would fight.
-        if (!condensed) runCatching { widgetHost.startListening() }
+        runCatching { widgetHost.startListening() }
     }
 
     override fun onStop() {
         super.onStop()
-        if (!condensed) runCatching { widgetHost.stopListening() }
+        runCatching { widgetHost.stopListening() }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!condensed) splitFromIntent(intent)
         if (intent.action == Intent.ACTION_MAIN) {
             // Home clears apps off both screens on the Duo.
             ScreenCoverage.clear()
             homePressed.tryEmit(Unit)
         }
-    }
-
-    /** The condensed launcher handed an app back to split again (see SplitHomeActivity.openBeside). */
-    private fun splitFromIntent(intent: Intent?) {
-        @Suppress("DEPRECATION")
-        val app = intent?.getParcelableExtra<Intent>(SplitHomeActivity.EXTRA_APP) ?: return
-        val appFirst = intent.getBooleanExtra(SplitHomeActivity.EXTRA_APP_FIRST, false)
-        intent.removeExtra(SplitHomeActivity.EXTRA_APP)
-        // Give the old split a moment to close first (ColorOS otherwise reuses it).
-        window.decorView.postDelayed({ FoldSplit.split(this, app, appFirst) }, 1200)
     }
 
     // --- Screen coverage heuristic (see ScreenCoverage) -------------------------------

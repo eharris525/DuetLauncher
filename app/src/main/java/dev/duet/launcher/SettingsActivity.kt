@@ -207,7 +207,7 @@ private fun SettingsScreen(activity: SettingsActivity) {
                 SwitchRow(
                     "Swipe an app to pick its screen",
                     prefs.swipeToPickScreen,
-                    "Swipe an app left or right to open it on the left or right screen. On other foldables, opened flat, a swipe opens it in split screen on that side with the launcher beside it. A tap opens it as usual.",
+                    "Swipe an app left or right to open it on the left or right screen. A tap opens it as usual.",
                 ) { prefs.swipeToPickScreen = it }
             }
             item {
