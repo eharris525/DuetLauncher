@@ -73,6 +73,10 @@ class Prefs(context: Context) {
     var glanceMirror by bool("glance_mirror", false)
     /** "pkg=colour" lines; colour is an ARGB int, or empty to use the app's own colour. */
     private var glanceAppsRaw by string("glance_apps", "")
+    /** Desktop on an external display, with the Duo as its touchpad. */
+    var desktopMode by bool("desktop_mode", true)
+    /** Touchpad pointer speed, 1–10. */
+    var touchpadSpeed by int("touchpad_speed", 5)
     private var dualLayoutName by string("dual_layout", DualLayout.HOME_AND_LIST.name)
     private var favoritesRaw by string("favorites", "")
     private var hiddenRaw by string("hidden", "")

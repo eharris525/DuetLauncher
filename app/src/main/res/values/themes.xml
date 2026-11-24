@@ -9,6 +9,11 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
+    <style name="Theme.Duet.Invisible" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoDisplay">false</item>
+    </style>
+
     <style name="Theme.Duet.Settings" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/settings_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

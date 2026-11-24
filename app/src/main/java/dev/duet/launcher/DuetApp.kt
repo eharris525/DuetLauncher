@@ -13,6 +13,7 @@ class DuetApp : Application() {
         instance = this
         prefs = Prefs(this)
         apps = AppRepository(this)
+        DesktopMode.init(this)
     }
 
     companion object {

@@ -219,6 +219,25 @@ private fun SettingsScreen(activity: SettingsActivity) {
                 ) { runCatching { ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } }
             }
 
+            item { Section("Desktop mode") }
+            item {
+                SwitchRow(
+                    "Desktop on an external display",
+                    prefs.desktopMode,
+                    "Plug in a monitor or TV to get a desktop with a taskbar there, and use the Duo as its touchpad. " +
+                        "Needs Duet screen detection.",
+                ) { prefs.desktopMode = it; DesktopMode.refresh(autoOpen = it) }
+            }
+            if (prefs.desktopMode) {
+                item { SliderRow("Pointer speed", prefs.touchpadSpeed, 1..10, "") { prefs.touchpadSpeed = it } }
+                item {
+                    ActionRow(
+                        "Open the touchpad",
+                        if (DesktopMode.active) "An external display is connected" else "No external display connected right now",
+                    ) { DesktopMode.openTouchpad() }
+                }
+            }
+
             item { Section("Glance Bar") }
             item {
                 SwitchRow(

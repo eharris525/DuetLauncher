@@ -29,7 +29,9 @@ class ScreenWatcherService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
+        instance = this
         ScreenCoverage.serviceConnected = true
+        DesktopMode.onServiceChanged()
         scheduleUpdate()
     }
 
@@ -40,6 +42,9 @@ class ScreenWatcherService : AccessibilityService() {
         }
     }
 
+    /** Re-reads the windows soon (e.g. after the desktop opened an app). */
+    fun requestUpdate() = scheduleUpdate()
+
     /** Coalesces bursts of events (a transition fires many) into one query. */
     private fun scheduleUpdate() {
         workerHandler.removeCallbacks(updateRunnable)
@@ -49,8 +54,14 @@ class ScreenWatcherService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
-        ScreenCoverage.serviceConnected = false
-        ScreenCoverage.clear()
+        // Android may connect a fresh copy of the service before telling this one it's gone
+        // (e.g. around UI test tools); only clear state that still belongs to this copy.
+        if (instance === this) {
+            instance = null
+            ScreenCoverage.serviceConnected = false
+            ScreenCoverage.clear()
+        }
+        DesktopMode.onServiceChanged()
         return super.onUnbind(intent)
     }
 
@@ -61,8 +72,16 @@ class ScreenWatcherService : AccessibilityService() {
 
     /** Runs on the worker thread. */
     private fun update() {
+        DesktopMode.onWindowsChanged(this)
         val g = ScreenCoverage.geometry ?: return
-        val all = runCatching { windows }.getOrDefault(emptyList())
+        // Only the Duo's own screens: with an external display connected, the plain window list
+        // follows whichever display has focus, and the monitor's apps would look like they
+        // cover one of the Duo's screens.
+        val all = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+                windowsOnAllDisplays.get(android.view.Display.DEFAULT_DISPLAY).orEmpty()
+            else windows
+        }.getOrDefault(emptyList())
         // The notification shade (and similar system overlays) replaces the whole window list
         // with one system window, hiding the apps underneath. Nothing has really changed, so
         // keep the current layout until it's gone.
@@ -82,7 +101,10 @@ class ScreenWatcherService : AccessibilityService() {
         mainHandler.post { ScreenCoverage.updateFromWindows(rects) }
     }
 
-    private companion object {
-        val IGNORED_TITLES = setOf("SurfaceQuickstep")
+    companion object {
+        /** The running service, used by desktop mode to draw the pointer and perform taps. */
+        @Volatile var instance: ScreenWatcherService? = null
+            private set
+        private val IGNORED_TITLES = setOf("SurfaceQuickstep")
     }
 }
