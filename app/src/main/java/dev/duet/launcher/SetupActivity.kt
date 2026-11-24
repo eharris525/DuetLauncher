@@ -160,7 +160,7 @@ private fun SetupScreen(activity: SetupActivity, onNotifications: () -> Unit, on
     val desktop: LazyListScope.(Boolean) -> Unit = { topSpace ->
             item {
                 if (topSpace) Spacer(Modifier.height(24.dp))
-                Group("Desktop mode (external display)")
+                Group("Desktop mode (experimental)")
                 Text(
                     "Plug a monitor, TV or display glasses into the USB-C port and Duet puts a desktop with a taskbar " +
                         "on it, with the Duo as the touchpad. For apps in movable, resizable windows, turn on two " +

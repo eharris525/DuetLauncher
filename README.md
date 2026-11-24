@@ -31,13 +31,17 @@ A minimal, list-based Android home screen built for the Surface Duo 2's two scre
   (Settings → Style).
 - **Fonts:** pick a built-in Android font or load your own .ttf / .otf (Settings → Font).
 - Long-press an app to favorite, reorder, hide, open App info, or uninstall. Search sits at the top of the list.
-- **Desktop mode:** plug a monitor, TV or display glasses into the USB-C port and Duet puts a
+- **Desktop mode (experimental):** plug a monitor, TV or display glasses into the USB-C port and Duet puts a
   desktop on it: a taskbar (Start menu with search, pinned and open apps, clock), your
   favorites as desktop shortcuts, and apps in windows. The Duo becomes the touchpad (see below).
 - **First-run setup guide:** shows which settings are on and opens each one. Reopen it from
   Duet Settings → *Setup guide*.
 
-## Desktop mode
+## Desktop mode (experimental)
+This is an early, experimental desktop experience. Android gives ordinary apps very little
+control over other apps' windows, so some things work around those limits and may be rough.
+Read the notes below.
+
 **Setup (once):**
 1. Turn on *Duet screen detection* (Settings → Accessibility). The pointer, taskbar and
    window controls work through it.

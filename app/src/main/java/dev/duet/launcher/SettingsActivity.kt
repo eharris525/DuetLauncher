@@ -224,7 +224,7 @@ private fun SettingsScreen(activity: SettingsActivity) {
                 ) { runCatching { ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } }
             }
 
-            item { Section("Desktop mode") }
+            item { Section("Desktop mode (experimental)") }
             item {
                 SwitchRow(
                     "Desktop on an external display",
