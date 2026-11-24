@@ -459,11 +459,10 @@ private fun DesktopScreen() {
     val prefs = DuetApp.instance.prefs
     val byKey = DuetApp.instance.apps.all.associateBy { it.key }
     val favs = prefs.favorites.mapNotNull { byKey[it] }
-    val accent = MaterialTheme.colorScheme.primary
     Box(
         Modifier.fillMaxSize()
-            // Android doesn't draw the wallpaper on external displays, so paint a backdrop in the accent colour.
-            .background(Brush.linearGradient(listOf(Color(0xFF0B0E14), accent.copy(alpha = 0.35f).compositeOver(Color(0xFF141A24)), Color(0xFF07090D))))
+            // Black: plain, and on display glasses black is see-through.
+            .background(Color.Black)
             .combinedClickable(
                 remember { MutableInteractionSource() }, null,
                 onClick = { DesktopMode.menuOpen = false; DesktopMode.contextMenu = null },

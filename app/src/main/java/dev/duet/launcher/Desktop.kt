@@ -293,14 +293,15 @@ object DesktopMode {
     val canControl: Boolean get() = supported && ScreenCoverage.serviceConnected && service != null
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun gesture(stroke: GestureDescription.StrokeDescription, done: (() -> Unit)? = null) {
+    private fun gesture(stroke: GestureDescription.StrokeDescription, done: ((completed: Boolean) -> Unit)? = null) {
         val s = service ?: return
         val d = display ?: return
         val g = GestureDescription.Builder().setDisplayId(d.displayId).addStroke(stroke).build()
-        s.dispatchGesture(g, object : AccessibilityService.GestureResultCallback() {
-            override fun onCompleted(gestureDescription: GestureDescription?) { done?.invoke() }
-            override fun onCancelled(gestureDescription: GestureDescription?) { done?.invoke() }
+        val sent = s.dispatchGesture(g, object : AccessibilityService.GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) { done?.invoke(true) }
+            override fun onCancelled(gestureDescription: GestureDescription?) { done?.invoke(false) }
         }, main)
+        if (!sent) main.post { done?.invoke(false) }
     }
 
     private fun point(x: Float, y: Float) = Path().apply { moveTo(x, y); lineTo(x + 0.5f, y) }
@@ -328,57 +329,113 @@ object DesktopMode {
     fun endDrag() { drag?.end(); drag = null }
 
     private var scroll: LiveStroke? = null
+    /** Where the injected scroll finger is now, and how far it has moved before touching down. */
     private var scrollX = 0f
     private var scrollY = 0f
+    private var pendingX = 0f
+    private var pendingY = 0f
 
-    /** Two-finger scroll: a swipe at the pointer that moves with the fingers (like touching the screen). */
+    /**
+     * Two-finger scroll: a finger on the external display, at the pointer, that moves with your
+     * fingers (like scrolling a touchscreen; lifting while moving flings).
+     *
+     * It only touches down once the fingers have moved far enough for the app to see a scroll
+     * straight away; touching down and moving slowly would look like a long press to the app.
+     * When the injected finger would run off the screen (or too far from the pointer), it lifts
+     * without a fling and starts again at the pointer, like re-placing fingers on a touchpad.
+     */
     fun scrollBy(dx: Float, dy: Float) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val d = display ?: return
         val (w, h) = size(d)
-        val s = scroll ?: LiveStroke(pointerX, pointerY).also { scroll = it; scrollX = pointerX; scrollY = pointerY }
-        scrollX = (scrollX + dx).coerceIn(1f, w - 2f); scrollY = (scrollY + dy).coerceIn(1f, h - 2f)
+        val dp = density()
+        val s = scroll
+        if (s == null) {
+            pendingX += dx; pendingY += dy
+            if (kotlin.math.hypot(pendingX, pendingY) < SCROLL_START_DP * dp) return
+            val (x, y) = pointerX.coerceIn(2f, w - 3f) to pointerY.coerceIn(2f, h - 3f)
+            scrollX = (x + pendingX).coerceIn(1f, w - 2f); scrollY = (y + pendingY).coerceIn(1f, h - 2f)
+            pendingX = 0f; pendingY = 0f
+            scroll = LiveStroke(x, y, scrollX, scrollY)
+            android.util.Log.d(SCROLL_TAG, "down at $x,$y")
+            return
+        }
+        val nx = scrollX + dx; val ny = scrollY + dy
+        val reach = minOf(w, h) * 0.45f
+        val outside = nx !in 1f..(w - 2f) || ny !in 1f..(h - 2f) ||
+            kotlin.math.hypot(nx - pointerX, ny - pointerY) > reach
+        if (outside) {
+            // Re-clutch: lift here without a fling, carry on from the pointer.
+            s.end(hold = true)
+            android.util.Log.d(SCROLL_TAG, "re-clutch at $scrollX,$scrollY")
+            scroll = null
+            pendingX = dx; pendingY = dy
+            return
+        }
+        scrollX = nx; scrollY = ny
         s.moveTo(scrollX, scrollY)
     }
 
-    fun endScroll() { scroll?.end(); scroll = null }
+    fun endScroll() {
+        if (scroll != null) android.util.Log.d(SCROLL_TAG, "up at $scrollX,$scrollY")
+        scroll?.end()
+        scroll = null
+        pendingX = 0f; pendingY = 0f
+    }
+
+    private const val SCROLL_START_DP = 14f
+    private const val SCROLL_TAG = "DuetScroll"
 
     /**
      * One finger held down on the external display that follows later moves, built from a chain
      * of continued gesture strokes (each segment is sent once the previous one has played).
      */
     @RequiresApi(Build.VERSION_CODES.R)
-    private class LiveStroke(x: Float, y: Float) {
+    private class LiveStroke(x: Float, y: Float, firstX: Float = x, firstY: Float = y) {
         private var current: GestureDescription.StrokeDescription? = null
+        /** Where the last sent segment really ended (the next one must start there). */
         private var atX = x
         private var atY = y
-        private var toX = x
-        private var toY = y
+        private var toX = firstX
+        private var toY = firstY
         private var busy = false
         private var ending = false
+        private var hold = false
         private var finished = false
-        private var lastAt = SystemClock.uptimeMillis()
+        private var nudge = 0.5f
+        private var lastAt = SystemClock.uptimeMillis() - 16
 
         init { send() }
 
         fun moveTo(x: Float, y: Float) { toX = x; toY = y; if (!busy) send() }
-        fun end() { ending = true; if (!busy) send() }
+
+        /** Lifts the finger. With [hold], it rests first so the app sees no fling. */
+        fun end(hold: Boolean = false) { ending = true; this.hold = hold; if (!busy) send() }
 
         private fun send() {
             if (finished) return
             val now = SystemClock.uptimeMillis()
-            val duration = (now - lastAt).coerceIn(8, 60)
+            var duration = (now - lastAt).coerceIn(8, 60)
             lastAt = now
-            val path = Path().apply { moveTo(atX, atY); lineTo(toX + if (toX == atX && toY == atY) 0.5f else 0f, toY) }
-            val last = ending
+            var ex = toX; var ey = toY
+            if (ex == atX && ey == atY) {
+                // A stroke needs some length: wiggle by half a pixel (alternating so it doesn't drift).
+                ex = atX + nudge; nudge = -nudge
+            }
+            val last = ending && (!hold || (ex - atX) * (ex - atX) + (ey - atY) * (ey - atY) < 1f)
+            if (last && hold) duration = 120 // rest before lifting: velocity drops to zero, no fling
+            val path = Path().apply { moveTo(atX, atY); lineTo(ex, ey) }
             val stroke = current?.continueStroke(path, 0, duration, !last)
                 ?: GestureDescription.StrokeDescription(path, 0, duration, !last)
             current = stroke
-            atX = toX; atY = toY
+            atX = ex; atY = ey
+            if (hold && ending) { toX = ex; toY = ey } // after this move, the next segment is the rest
             busy = true
             if (last) finished = true
-            gesture(stroke) {
+            gesture(stroke) { completed ->
                 busy = false
+                // If Android dropped the stroke, the finger is up: start a fresh one from here.
+                if (!completed) { current = null; android.util.Log.d(SCROLL_TAG, "stroke dropped; restarting") }
                 if (!finished && (ending || toX != atX || toY != atY)) send()
             }
         }
@@ -517,15 +574,16 @@ object DesktopMode {
     fun workArea(): Rect {
         val d = display ?: return Rect()
         val (w, h) = size(d)
-        return Rect(0, 0, w, h - taskbarPx())
+        return Rect(0, EDGE_PX, w, h - taskbarPx())
     }
 
     /**
-     * The desktop's own window: the whole display, inset a few pixels at the top and sides.
-     * Android shifts a new window that shares a corner with an existing one, and every snapped
-     * or maximized window would otherwise share the desktop's top corners.
+     * The desktop's own window. Android shifts a new window that shares a corner with an existing
+     * one, and every snapped or maximized window would share the desktop's corners. So app windows
+     * start [EDGE_PX] below the top (the black desktop shows there, which is invisible on display
+     * glasses), and the desktop ends [EDGE_PX] above the bottom, hidden behind the taskbar.
      */
-    private fun desktopBounds(): Rect = fullArea().apply { if (!isEmpty) { left += 8; top += 8; right -= 8 } }
+    private fun desktopBounds(): Rect = fullArea().apply { if (!isEmpty) bottom -= EDGE_PX }
 
     fun fullArea(): Rect = display?.let { size(it) }?.let { (w, h) -> Rect(0, 0, w, h) } ?: Rect()
 
@@ -535,7 +593,7 @@ object DesktopMode {
             Snap.LEFT -> Rect(a.left, a.top, a.centerX(), a.bottom)
             Snap.RIGHT -> Rect(a.centerX(), a.top, a.right, a.bottom)
             Snap.MAXIMIZE -> a
-            Snap.FULLSCREEN -> fullArea()
+            Snap.FULLSCREEN -> fullArea().apply { top = EDGE_PX }
             // Never "restore" to a full-screen or maximized size; fall back to a normal window.
             Snap.RESTORE -> restore[pkg]?.takeIf { !near(it, fullArea()) && !near(it, a) } ?: display?.let { nextWindow(it) } ?: a
         }
@@ -578,7 +636,7 @@ object DesktopMode {
         val d = display ?: return
         val intent = app.packageManager.getLaunchIntentForPackage(pkg) ?: return
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (pkg == fullscreenPkg && bounds != fullArea()) fullscreenPkg = null
+        if (pkg == fullscreenPkg && bounds != snapRect(Snap.FULLSCREEN, pkg)) fullscreenPkg = null
         val reopen = {
             reopening = null
             runCatching {
@@ -691,6 +749,8 @@ object DesktopMode {
     }
 
     const val TASKBAR_DP = 52
+    /** See [desktopBounds]. */
+    const val EDGE_PX = 8
 
     /**
      * Everything Duet draws on the external display above the apps: the taskbar (which grows to

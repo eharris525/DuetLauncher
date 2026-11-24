@@ -290,7 +290,8 @@ private class TouchpadView(ctx: Context) : View(ctx) {
                 if (e.pointerCount >= 2) {
                     if (travel > slop) {
                         scrolling = true
-                        val g = DesktopMode.density() / phoneDensity * 1.3f
+                        // About 2.5x the finger's movement, like laptop two-finger scrolling.
+                        val g = DesktopMode.density() / phoneDensity * 2.5f
                         DesktopMode.scrollBy(dx * g, dy * g)
                     }
                 } else if (maxPointers == 1) {
