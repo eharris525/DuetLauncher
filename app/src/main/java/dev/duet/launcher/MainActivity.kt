@@ -82,6 +82,16 @@ class MainActivity : ComponentActivity() {
         accessibility = getSystemService(AccessibilityManager::class.java)
         accessibility.addAccessibilityStateChangeListener(a11yListener)
         refreshSemanticsMode()
+        if (savedInstanceState == null && !prefs.setupDone) {
+            // Once laid out: on a spanned Duo, open the guide on one screen rather than across both.
+            window.decorView.post {
+                runCatching { startActivity(
+                    // Its own task: inside the home task it would be cleared away by the Home press.
+                    Intent(this, SetupActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    ScreenCoverage.launchOptions(Covered.FIRST),
+                ) }
+            }
+        }
         setContent {
             DuetTheme {
                 Box(Modifier.fillMaxSize().then(if (hideSemantics) Modifier.clearAndSetSemantics { } else Modifier)) {

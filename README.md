@@ -31,6 +31,42 @@ A minimal, list-based Android home screen built for the Surface Duo 2's two scre
   (Settings → Style).
 - **Fonts:** pick a built-in Android font or load your own .ttf / .otf (Settings → Font).
 - Long-press an app to favorite, reorder, hide, open App info, or uninstall. Search sits at the top of the list.
+- **Desktop mode:** plug a monitor, TV or display glasses into the USB-C port and Duet puts a
+  desktop on it: a taskbar (Start menu with search, pinned and open apps, clock), your
+  favorites as desktop shortcuts, and apps in windows. The Duo becomes the touchpad (see below).
+- **First-run setup guide:** shows which settings are on and opens each one. Reopen it from
+  Duet Settings → *Setup guide*.
+
+## Desktop mode
+**Setup (once):**
+1. Turn on *Duet screen detection* (Settings → Accessibility). The pointer, taskbar and
+   window controls work through it.
+2. For apps in movable, resizable windows: turn on Developer options (Settings → System →
+   About → tap *Build number* seven times), then in Developer options turn on
+   **Enable freeform windows** and **Force desktop mode**, and restart the Duo.
+
+Without step 2 the desktop still works, but every app fills the screen.
+
+**Using it:**
+- The touchpad opens on the Duo when a display is connected. To get it back later, tap the
+  *Desktop mode is on* notification.
+- Touchpad: one finger moves the pointer and a tap clicks. Use the **Left / Right click**
+  buttons, or tap with two fingers to right-click. Scroll with two fingers. To drag,
+  double-tap and hold, or hold still for a moment.
+- Buttons for Back, Start, Show desktop, and a keyboard that types into the selected text
+  box (or the Start menu search).
+- **Window controls** sit on each window's title bar:
+  - move (drag the dots)
+  - snap left or right
+  - maximize or restore
+  - full screen (hides the taskbar; touch the bottom edge to bring it back)
+
+  Drag the round corner to resize.
+- **Right-click** a taskbar icon, a Start menu app or a desktop shortcut for snap, maximize,
+  full screen, close, pin to taskbar and app info. Right-click the desktop for more options.
+- **Windows reopen when moved or resized.** Android doesn't let other apps move or resize a
+  window that's already open. So Duet closes the window and reopens the app at the new size.
+  Most apps return to where you were, but text that wasn't saved can be lost.
 
 ## Build
     ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk

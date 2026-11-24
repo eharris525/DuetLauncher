@@ -135,6 +135,11 @@ private fun SettingsScreen(activity: SettingsActivity) {
                         Text(mode.describe(), fontWeight = FontWeight.Medium)
                     }
                 }
+                ActionRow("Setup guide", "The settings Duet needs, including desktop mode on an external display") {
+                    ctx.startActivity(Intent(ctx, SetupActivity::class.java))
+                }
+            }
+            item {
                 ActionRow("Set as default home app", "Opens Android's default-apps settings") {
                     runCatching { ctx.startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
                 }

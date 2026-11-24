@@ -37,6 +37,12 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
+/** An app's window on the external display. */
+data class AppWindow(val pkg: String, val bounds: Rect)
+
+/** A right-click menu: for an app ([pkg]), or for the desktop itself when null. */
+data class ContextMenu(val pkg: String?, val x: Float, val y: Float)
+
 /**
  * Desktop mode: when an external display is connected, Duet shows a desktop with a taskbar
  * there, and the Duo becomes a touchpad that moves a mouse pointer on it.
@@ -60,6 +66,25 @@ object DesktopMode {
     /** Packages with a window open on the external display, in the order they appeared. */
     var running by mutableStateOf<List<String>>(emptyList())
         private set
+    /** App windows visible on the external display, topmost first. */
+    var windows by mutableStateOf<List<AppWindow>>(emptyList())
+        private set
+    val activeWindow: AppWindow? get() = windows.firstOrNull()
+    /** App shown full screen (covering the taskbar), if any. */
+    var fullscreenPkg by mutableStateOf<String?>(null)
+        private set
+    /** Right-click menu open in the taskbar layer, shown at the pointer. */
+    var contextMenu by mutableStateOf<ContextMenu?>(null)
+    /** The pointer is resting on the bottom edge, so a hidden taskbar slides back in. */
+    var peek by mutableStateOf(false)
+        private set
+    /** A window being moved or resized by dragging: its outline, in display pixels. */
+    var dragOutline by mutableStateOf<Rect?>(null)
+
+    /** The taskbar steps aside for a full-screen app (until the pointer touches the bottom edge). */
+    val taskbarHidden: Boolean
+        get() = activeWindow?.pkg != null && activeWindow?.pkg == fullscreenPkg && !peek && !menuOpen && contextMenu == null
+
     /** Bumped when the touchpad should close (display unplugged). */
     var closeTouchpad by mutableIntStateOf(0)
         private set
@@ -94,10 +119,17 @@ object DesktopMode {
         }
         stopShell()
         display = ext
+        updateNotification()
         if (ext == null) { closeTouchpad++; return }
         val (w, h) = size(ext)
         pointerX = w / 2f; pointerY = h / 2f
         attachOverlays()
+        // A desktop left over from an earlier connection keeps its old window size; start fresh.
+        runCatching {
+            app.getSystemService(android.app.ActivityManager::class.java).appTasks
+                .filter { it.taskInfo.baseActivity?.className == DesktopActivity::class.java.name }
+                .forEach { it.finishAndRemoveTask() }
+        }
         showDesktop()
         if (autoOpen) openTouchpad()
     }
@@ -108,6 +140,29 @@ object DesktopMode {
         return m.widthPixels to m.heightPixels
     }
 
+    /**
+     * Taskbar height in pixels. In Android's desktop mode the system reserves a navigation bar
+     * strip along the bottom that apps never use; the taskbar covers exactly that strip (or its
+     * own height, whichever is taller), so maximized windows end right where it starts.
+     */
+    fun taskbarPx(): Int {
+        val d = display ?: return 0
+        val own = (TASKBAR_DP * density()).toInt()
+        val app = android.graphics.Point().also { @Suppress("DEPRECATION") d.getSize(it) }
+        val reserved = size(d).second - app.y
+        return maxOf(own, reserved)
+    }
+
+    /** Opens activities on the desktop in Android's full-screen mode even when the display defaults to windows. */
+    fun fullscreenOptions(displayId: Int): ActivityOptions {
+        val o = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
+        // Hidden (test) API: if it's unavailable the desktop just opens as a big window.
+        runCatching {
+            ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType).invoke(o, 1 /* FULLSCREEN */)
+        }.onFailure { android.util.Log.w("DuetDesktop", "no setLaunchWindowingMode", it) }
+        return o
+    }
+
     fun density(): Float {
         val d = display ?: return 1f
         val m = android.util.DisplayMetrics()
@@ -116,6 +171,36 @@ object DesktopMode {
     }
 
     // --- Launching on the desktop ------------------------------------------------------
+
+    // --- Notification ------------------------------------------------------------------------
+
+    private const val CHANNEL = "desktop"
+    private const val NOTIFICATION_ID = 7
+
+    /** While desktop mode is on, a quiet ongoing notification that brings the touchpad back. */
+    private fun updateNotification() {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        if (display == null) { nm.cancel(NOTIFICATION_ID); return }
+        nm.createNotificationChannel(
+            android.app.NotificationChannel(CHANNEL, "Desktop mode", android.app.NotificationManager.IMPORTANCE_LOW)
+                .apply { description = "Shown while Duet's desktop is on an external display" }
+        )
+        val open = android.app.PendingIntent.getActivity(
+            app, 0,
+            Intent(app, TouchpadActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = android.app.Notification.Builder(app, CHANNEL)
+            .setSmallIcon(R.drawable.ic_desktop)
+            .setContentTitle("Desktop mode is on")
+            .setContentText("Tap to open the touchpad")
+            .setContentIntent(open)
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setCategory(android.app.Notification.CATEGORY_STATUS)
+            .build()
+        runCatching { nm.notify(NOTIFICATION_ID, n) }
+    }
 
     fun openTouchpad() {
         runCatching {
@@ -134,7 +219,7 @@ object DesktopMode {
         runCatching {
             app.startActivity(
                 Intent(app, DesktopActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
-                ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).toBundle(),
+                fullscreenOptions(d.displayId).setLaunchBounds(desktopBounds().takeIf { !it.isEmpty }).toBundle(),
             )
         }
     }
@@ -145,7 +230,7 @@ object DesktopMode {
     private fun nextWindow(d: Display): Rect {
         val (w, h) = size(d)
         val dp = density()
-        val bar = (TASKBAR_DP * dp).toInt()
+        val bar = taskbarPx()
         val ww = (w * 0.66f).toInt(); val wh = ((h - bar) * 0.8f).toInt()
         val step = (36 * dp).toInt() * (cascade++ % 5)
         val left = (w - ww) / 2 - 2 * (36 * dp).toInt() + step
@@ -159,8 +244,11 @@ object DesktopMode {
     }
 
     fun launch(appInfo: AppInfo) {
-        menuOpen = false; query = ""
-        val opts = options() ?: return
+        menuOpen = false; query = ""; contextMenu = null
+        val d = display ?: return
+        // An app that's already open comes to the front where it is, rather than jumping to a new spot.
+        val known = windows.firstOrNull { it.pkg == appInfo.component.packageName }?.bounds
+        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).setLaunchBounds(known ?: nextWindow(d)).toBundle()
         val la = app.getSystemService(android.content.pm.LauncherApps::class.java)
         val ok = if (appInfo.user == android.os.Process.myUserHandle()) runCatching {
             app.startActivity(
@@ -185,6 +273,12 @@ object DesktopMode {
     fun movePointer(dx: Float, dy: Float) {
         pointerX += dx; pointerY += dy
         clampPointer()
+        display?.let { d ->
+            val h = size(d).second
+            val bar = taskbarPx().toFloat()
+            if (!peek && pointerY >= h - 3) peek = true
+            else if (peek && pointerY < h - bar * 1.5f) peek = false
+        }
         overlays?.movePointer()
         drag?.moveTo(pointerX, pointerY)
     }
@@ -364,12 +458,23 @@ object DesktopMode {
         if (!active || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val id = display?.displayId ?: return
         val wins = runCatching { s.windowsOnAllDisplays.get(id) }.getOrNull().orEmpty()
-        val all = wins.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-            .mapNotNull { w -> runCatching { w.root?.packageName?.toString() }.getOrNull() }
-            .distinct()
+        val appWins = wins.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }.mapNotNull { w ->
+            val pkg = runCatching { w.root?.packageName?.toString() }.getOrNull() ?: return@mapNotNull null
+            AppWindow(pkg, Rect().also { w.getBoundsInScreen(it) })
+        }
+        val all = appWins.map { it.pkg }.distinct()
+        // Android's own desktop layer (the "secondary home") isn't an app window you'd manage.
+        val visible = appWins.filter { it.pkg != app.packageName && it.pkg !in homePackages }.distinctBy { it.pkg }
         val desktopShowing = app.packageName in all
+        // Android brings its own desktop layer forward when a window closes, covering Duet's desktop
+        // (and every app). Put Duet's desktop back on top of it.
+        val homeShowing = all.any { it in homePackages && it != app.packageName }
+        if (homeShowing && !desktopShowing) main.post { raiseDesktopOverHome() }
         val pkgs = all.filter { it != app.packageName }
         main.post {
+            windows = visible
+            // (Not while it's being closed and reopened at a new size.)
+            if (fullscreenPkg != null && fullscreenPkg != reopening && visible.none { it.pkg == fullscreenPkg }) fullscreenPkg = null
             // Only visible windows are reported, so an app that's out of sight isn't necessarily
             // closed. Treat it as closed only when the desktop shows through without "show
             // desktop" having hidden it (e.g. Back closed it). Hidden behind another app, or
@@ -381,10 +486,180 @@ object DesktopMode {
         }
     }
 
+    private var lastRaise = 0L
+
+    private fun raiseDesktopOverHome() {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastRaise < 1500) return // never loop if something keeps it from coming forward
+        lastRaise = now
+        showDesktop()
+    }
+
     /** Apps hidden behind the desktop by "show desktop". */
     private var minimized = emptySet<String>()
 
+    /** Packages that provide a home screen, including the system's desktop layer on external displays. */
+    private val homePackages: Set<String> by lazy {
+        listOf(Intent.CATEGORY_HOME, Intent.CATEGORY_SECONDARY_HOME).flatMap { cat ->
+            runCatching {
+                app.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(cat), 0).map { it.activityInfo.packageName }
+            }.getOrDefault(emptyList())
+        }.toSet()
+    }
+
     private fun refreshRunning() { ScreenWatcherService.instance?.requestUpdate() }
+
+    // --- Window management -------------------------------------------------------------------
+
+    enum class Snap { LEFT, RIGHT, MAXIMIZE, FULLSCREEN, RESTORE }
+
+    /** Where windows go when maximized: the whole screen above the taskbar. */
+    fun workArea(): Rect {
+        val d = display ?: return Rect()
+        val (w, h) = size(d)
+        return Rect(0, 0, w, h - taskbarPx())
+    }
+
+    /**
+     * The desktop's own window: the whole display, inset a few pixels at the top and sides.
+     * Android shifts a new window that shares a corner with an existing one, and every snapped
+     * or maximized window would otherwise share the desktop's top corners.
+     */
+    private fun desktopBounds(): Rect = fullArea().apply { if (!isEmpty) { left += 8; top += 8; right -= 8 } }
+
+    fun fullArea(): Rect = display?.let { size(it) }?.let { (w, h) -> Rect(0, 0, w, h) } ?: Rect()
+
+    fun snapRect(s: Snap, pkg: String): Rect {
+        val a = workArea()
+        return when (s) {
+            Snap.LEFT -> Rect(a.left, a.top, a.centerX(), a.bottom)
+            Snap.RIGHT -> Rect(a.centerX(), a.top, a.right, a.bottom)
+            Snap.MAXIMIZE -> a
+            Snap.FULLSCREEN -> fullArea()
+            // Never "restore" to a full-screen or maximized size; fall back to a normal window.
+            Snap.RESTORE -> restore[pkg]?.takeIf { !near(it, fullArea()) && !near(it, a) } ?: display?.let { nextWindow(it) } ?: a
+        }
+    }
+
+    /** Bounds a window had before it was snapped, maximized or made full screen. */
+    private val restore = HashMap<String, Rect>()
+
+    /** Which layout a window is in now, if any (compares against the snap rects). */
+    fun snapOf(w: AppWindow): Snap? = when {
+        w.pkg == fullscreenPkg -> Snap.FULLSCREEN
+        else -> listOf(Snap.MAXIMIZE, Snap.LEFT, Snap.RIGHT).firstOrNull { near(w.bounds, snapRect(it, w.pkg)) }
+    }
+
+    private fun near(a: Rect, b: Rect): Boolean {
+        val tol = 24 * density()
+        return kotlin.math.abs(a.left - b.left) < tol && kotlin.math.abs(a.top - b.top) < tol &&
+            kotlin.math.abs(a.right - b.right) < tol && kotlin.math.abs(a.bottom - b.bottom) < tol
+    }
+
+    fun snap(pkg: String, s: Snap) {
+        val w = windows.firstOrNull { it.pkg == pkg }
+        if (w != null && snapOf(w) == null && !near(w.bounds, fullArea())) restore[pkg] = Rect(w.bounds)
+        val target = snapRect(s, pkg)
+        fullscreenPkg = if (s == Snap.FULLSCREEN) pkg else if (fullscreenPkg == pkg) null else fullscreenPkg
+        place(pkg, target)
+    }
+
+    /**
+     * Moves/resizes [pkg]'s window to [bounds].
+     *
+     * Android only lets an ordinary app choose a window's size when the window *opens*: launch
+     * bounds are ignored for an app that's already open, and it doesn't react to drags on
+     * window edges or title bars made through accessibility. So Duet closes the window with its
+     * own title-bar ✕ (taps do work) and opens the app again at the new size. Most apps come back
+     * where they were; anything they don't save is lost, which the setup guide mentions.
+     */
+    fun place(pkg: String, bounds: Rect) {
+        contextMenu = null
+        val d = display ?: return
+        val intent = app.packageManager.getLaunchIntentForPackage(pkg) ?: return
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (pkg == fullscreenPkg && bounds != fullArea()) fullscreenPkg = null
+        val reopen = {
+            reopening = null
+            runCatching {
+                app.startActivity(intent, ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).setLaunchBounds(bounds).toBundle())
+            }
+            main.postDelayed({ refreshRunning() }, 400)
+        }
+        val w = windows.firstOrNull { it.pkg == pkg }
+        if (w == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) { reopen(); return }
+        val run: () -> Unit = {
+            reopening = pkg
+            closeWindow(w)
+            // Reopen only once the old window is gone: Android nudges a new window away from any
+            // window that shares a corner with it, including the one still closing.
+            val start = SystemClock.uptimeMillis()
+            var goneAt = 0L
+            val wait = object : Runnable {
+                override fun run() {
+                    val now = SystemClock.uptimeMillis()
+                    if (goneAt == 0L && windows.none { it.pkg == pkg }) goneAt = now
+                    if ((goneAt != 0L && now - goneAt >= REOPEN_SETTLE_MS) || now - start > REOPEN_TIMEOUT_MS) reopen()
+                    else { refreshRunning(); main.postDelayed(this, 100) }
+                }
+            }
+            main.postDelayed(wait, 150)
+        }
+        // The ✕ must be on top to be clicked: bring the window forward first if another covers it.
+        if (activeWindow?.pkg != pkg) {
+            runCatching { app.startActivity(intent, ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).toBundle()) }
+            main.postDelayed(run, 350)
+        } else run()
+    }
+
+    /** Clicks the ✕ on a window's title bar (Android's desktop-mode caption, top-right corner). */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun closeWindow(w: AppWindow) {
+        val dp = density()
+        val x = w.bounds.right - CAPTION_CLOSE_DX_DP * dp
+        val y = w.bounds.top + CAPTION_Y_DP * dp
+        gesture(GestureDescription.StrokeDescription(point(x, y), 0, 40))
+    }
+
+    /** Closes [pkg]'s window (its title-bar ✕). */
+    fun close(pkg: String) {
+        contextMenu = null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        windows.firstOrNull { it.pkg == pkg }?.let { closeWindow(it) }
+    }
+
+    private const val CAPTION_CLOSE_DX_DP = 22f
+    private const val CAPTION_Y_DP = 21f
+    /** App being closed and reopened by [place]; its window is briefly missing. */
+    private var reopening: String? = null
+
+    private const val REOPEN_SETTLE_MS = 350L
+    private const val REOPEN_TIMEOUT_MS = 2500L
+
+    /** End of a drag on a window's move handle or resize corner. */
+    fun finishDrag(pkg: String) {
+        val r = dragOutline ?: return
+        dragOutline = null
+        val min = (200 * density()).toInt()
+        if (r.width() < min || r.height() < min) return
+        restore.remove(pkg)
+        place(pkg, r)
+    }
+
+    fun appInfo(pkg: String) {
+        contextMenu = null
+        val d = display ?: return
+        runCatching {
+            app.startActivity(
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", pkg, null))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).setLaunchBounds(nextWindow(d)).toBundle(),
+            )
+        }
+    }
+
+    /** Right-click: a long press, which is how Android apps open their context menus. */
+    fun rightClick() = longPress()
 
     // --- Overlays on the external display --------------------------------------------------
 
@@ -417,28 +692,44 @@ object DesktopMode {
 
     const val TASKBAR_DP = 52
 
-    /** The taskbar (which grows to show the start menu) and the pointer, drawn above all apps. */
+    /**
+     * Everything Duet draws on the external display above the apps: the taskbar (which grows to
+     * full screen while a menu is open, so a click outside closes it), the controls on the
+     * active window, the outline while dragging a window, and the pointer on top.
+     */
     private class Overlays(val service: AccessibilityService, display: Display) {
         private val ctx = service.createDisplayContext(display)
         private val wm = ctx.getSystemService(WindowManager::class.java)
         private val owner = OverlayOwner()
-        private val shell = ComposeView(ctx)
+        private val dp = ctx.resources.displayMetrics.density
+        private val shell = compose { DuetTheme { DesktopShell(onLayoutChange = { relayout() }) } }
+        private val controls = compose { DuetTheme { WindowControls(onLayoutChange = { relayout() }) } }
+        private val grip = compose { DuetTheme { ResizeGrip() } }
+        private val outline = OutlineView(ctx)
         private val pointer = PointerView(ctx)
         private val shellParams = params(touchable = true)
+        private val controlsParams = params(touchable = true)
+        private val gripParams = params(touchable = true)
+        private val outlineParams = params(touchable = false)
         private val pointerParams = params(touchable = false)
-        private var lastMenu = false
 
         init {
             owner.start()
-            shell.setViewTreeLifecycleOwner(owner)
-            shell.setViewTreeSavedStateRegistryOwner(owner)
-            shell.setContent { DuetTheme { DesktopShell(onMenuChange = { relayout() }) } }
-            layoutShell()
+            layoutAll()
+            wm.addView(outline, outlineParams)
+            wm.addView(controls, controlsParams)
+            wm.addView(grip, gripParams)
             wm.addView(shell, shellParams)
-            val size = (28 * ctx.resources.displayMetrics.density).toInt()
+            val size = (28 * dp).toInt()
             pointerParams.width = size; pointerParams.height = size
             placePointer()
             wm.addView(pointer, pointerParams)
+        }
+
+        private fun compose(content: @androidx.compose.runtime.Composable () -> Unit) = ComposeView(ctx).apply {
+            setViewTreeLifecycleOwner(owner)
+            setViewTreeSavedStateRegistryOwner(owner)
+            setContent(content)
         }
 
         private fun params(touchable: Boolean) = WindowManager.LayoutParams(
@@ -450,19 +741,48 @@ object DesktopMode {
             PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.TOP or Gravity.START }
 
-        private fun layoutShell() {
+        private fun layoutAll() {
             val (w, h) = size(ctx.display!!)
-            val bar = (TASKBAR_DP * ctx.resources.displayMetrics.density).toInt()
+            val bar = taskbarPx()
+            val expanded = menuOpen || contextMenu != null
             shellParams.width = w
-            // With the start menu open the shell covers the whole screen, so a click outside the menu closes it.
-            shellParams.height = if (menuOpen) h else bar
-            shellParams.y = if (menuOpen) 0 else h - bar
-            lastMenu = menuOpen
+            shellParams.height = when { expanded -> h; taskbarHidden -> 2; else -> bar }
+            shellParams.y = h - shellParams.height
+            shellParams.x = 0
+
+            outlineParams.width = w; outlineParams.height = h; outlineParams.x = 0; outlineParams.y = 0
+
+            // Window controls: a pill centred on the active window's top edge, just above it when there's room.
+            val a = activeWindow
+            val cw = (CONTROLS_W_DP * dp).toInt(); val ch = (CONTROLS_H_DP * dp).toInt()
+            if (a == null || expanded) {
+                controlsParams.width = 1; controlsParams.height = 1; controlsParams.x = -10; controlsParams.y = -10
+            } else {
+                controlsParams.width = cw; controlsParams.height = ch
+                // On the left end of the window's title bar (Android's own buttons are on the right).
+                controlsParams.x = (a.bounds.left + (6 * dp).toInt()).coerceIn(0, w - cw)
+                controlsParams.y = a.bounds.top + (2 * dp).toInt()
+            }
+            // Resize corner: on the active window's bottom-right corner (not in full screen).
+            val g = (GRIP_DP * dp).toInt()
+            val free = a != null && snapOf(a) != Snap.FULLSCREEN && !expanded
+            // Left alone mid-drag: the corner's window is receiving the drag.
+            if (gripDragging) Unit
+            else if (!free || a == null) {
+                gripParams.width = 1; gripParams.height = 1; gripParams.x = -10; gripParams.y = -10
+            } else {
+                gripParams.width = g; gripParams.height = g
+                gripParams.x = (a.bounds.right - g * 2 / 3).coerceAtMost(w - g)
+                gripParams.y = (a.bounds.bottom - g * 2 / 3).coerceAtMost(h - g)
+            }
         }
 
         fun relayout() {
-            layoutShell()
+            layoutAll()
             runCatching { wm.updateViewLayout(shell, shellParams) }
+            runCatching { wm.updateViewLayout(controls, controlsParams) }
+            runCatching { wm.updateViewLayout(grip, gripParams) }
+            outline.invalidate()
         }
 
         private fun placePointer() { pointerParams.x = pointerX.toInt(); pointerParams.y = pointerY.toInt() }
@@ -473,9 +793,34 @@ object DesktopMode {
         }
 
         fun remove() {
-            runCatching { wm.removeView(pointer) }
-            runCatching { wm.removeView(shell) }
+            listOf(pointer, shell, grip, controls, outline).forEach { v -> runCatching { wm.removeView(v) } }
             owner.stop()
+        }
+    }
+
+    /** True while the resize corner is being dragged (its window must stay put until the drag ends). */
+    var gripDragging = false
+
+    /** Relays a layout change from Compose state to the overlay windows. */
+    fun relayoutOverlays() { overlays?.relayout() }
+
+    const val CONTROLS_W_DP = 216
+    const val CONTROLS_H_DP = 34
+    const val GRIP_DP = 30
+
+    /** Outline of a window being moved or resized. */
+    private class OutlineView(ctx: Context) : View(ctx) {
+        private val d = ctx.resources.displayMetrics.density
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x332F80ED }
+        private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xCCFFFFFF.toInt(); style = Paint.Style.STROKE; strokeWidth = 2 * d
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val r = dragOutline ?: return
+            val rf = android.graphics.RectF(r)
+            canvas.drawRoundRect(rf, 10 * d, 10 * d, fill)
+            canvas.drawRoundRect(rf, 10 * d, 10 * d, stroke)
         }
     }
 

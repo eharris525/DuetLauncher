@@ -12,6 +12,15 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Home screens, so desktop mode can tell the system's desktop layer from app windows -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.SECONDARY_HOME" />
+        </intent>
         <!-- Icon pack discovery (ADW / Nova / GO / Apex conventions) -->
         <intent><action android:name="org.adw.launcher.THEMES" /></intent>
         <intent><action android:name="com.novalauncher.THEME" /></intent>
@@ -52,13 +61,21 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:resizeableActivity="true"
-            android:taskAffinity="dev.duet.launcher.desktop">
+            android:taskAffinity="dev.duet.launcher.desktop"
+            android:theme="@style/Theme.Duet.Desktop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.SECONDARY_HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".SetupActivity"
+            android:exported="false"
+            android:label="Duet setup"
+            android:taskAffinity="dev.duet.launcher.setup"
+            android:theme="@style/Theme.Duet.Settings" />
 
         <activity
             android:name=".FocusActivity"

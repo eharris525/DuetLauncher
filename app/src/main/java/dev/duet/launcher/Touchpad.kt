@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -133,17 +135,33 @@ private fun Message(title: String, body: String, action: () -> Unit, actionLabel
 
 @Composable
 private fun Pad(modifier: Modifier) {
-    Box(
+    Column(
         modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFF101318))
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
     ) {
-        Text(
-            "Move: one finger · Click: tap · Right-click: two-finger tap\nScroll: two fingers · Drag: double-tap and hold, or hold still",
-            fontSize = 12.sp, color = Color.White.copy(alpha = 0.3f),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(14.dp),
-        )
-        AndroidView({ TouchpadView(it) }, Modifier.fillMaxSize())
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Text(
+                "Move: one finger · Click: tap · Right-click: two-finger tap\nScroll: two fingers · Drag: double-tap and hold, or hold still",
+                fontSize = 12.sp, color = Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(14.dp),
+            )
+            AndroidView({ TouchpadView(it) }, Modifier.fillMaxSize())
+        }
+        // Like a laptop touchpad's buttons.
+        Row(Modifier.fillMaxWidth().height(64.dp)) {
+            PadButton("Left click", Modifier.weight(1f)) { DesktopMode.click() }
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.08f)))
+            PadButton("Right click", Modifier.weight(1f)) { DesktopMode.rightClick() }
+        }
     }
+}
+
+@Composable
+private fun PadButton(label: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.fillMaxHeight().background(Color.White.copy(alpha = 0.04f)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f)) }
 }
 
 @Composable

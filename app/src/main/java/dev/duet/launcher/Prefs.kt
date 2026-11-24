@@ -73,6 +73,8 @@ class Prefs(context: Context) {
     var glanceMirror by bool("glance_mirror", false)
     /** "pkg=colour" lines; colour is an ARGB int, or empty to use the app's own colour. */
     private var glanceAppsRaw by string("glance_apps", "")
+    /** The first-run setup guide has been completed (or dismissed). */
+    var setupDone by bool("setup_done", false)
     /** Desktop on an external display, with the Duo as its touchpad. */
     var desktopMode by bool("desktop_mode", true)
     /** Touchpad pointer speed, 1–10. */
