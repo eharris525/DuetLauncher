@@ -309,21 +309,14 @@ object DesktopMode {
     fun click() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         // Clicking a window's title-bar ✕ closes the app completely, not just its window.
-        val hit = windows.firstOrNull { it.bounds.contains(pointerX.toInt(), pointerY.toInt()) }
-        if (hit != null && onCloseButton(hit, pointerX, pointerY)) {
-            // The ✕'s tap target is smaller than it looks; a click near it goes to its centre.
-            closeWindow(hit)
-            afterClose(hit.pkg)
+        // A click on (or near) a window's title-bar ✕ presses that button directly: its tap
+        // target is smaller than it looks, and windows' title bars differ between apps.
+        closeButtonAt(pointerX, pointerY)?.let { (pkg, button) ->
+            tapCentre(button)
+            afterClose(pkg)
             return
         }
         gesture(GestureDescription.StrokeDescription(point(pointerX, pointerY), 0, 40))
-    }
-
-    private fun onCloseButton(w: AppWindow, x: Float, y: Float): Boolean {
-        val dp = density()
-        val cx = w.bounds.right - CAPTION_CLOSE_DX_DP * dp
-        val cy = w.bounds.top + CAPTION_Y_DP * dp
-        return kotlin.math.abs(x - cx) <= 18 * dp && kotlin.math.abs(y - cy) <= 18 * dp
     }
 
     /**
@@ -746,9 +739,39 @@ object DesktopMode {
         } else run()
     }
 
+    /** Title-bar ✕ buttons on the external display: (package, button). */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun closeButtons(): List<Pair<String, AccessibilityNodeInfo>> {
+        val s = service ?: return emptyList()
+        val d = display ?: return emptyList()
+        val wins = runCatching { s.windowsOnAllDisplays.get(d.displayId) }.getOrNull().orEmpty()
+        return wins.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }.flatMap { w ->
+            val root = runCatching { w.root }.getOrNull() ?: return@flatMap emptyList()
+            val pkg = root.packageName?.toString() ?: return@flatMap emptyList()
+            runCatching { root.findAccessibilityNodeInfosByViewId(CLOSE_BUTTON_ID) }.getOrNull().orEmpty().map { pkg to it }
+        }
+    }
+
+    /** Title bars only react to real taps (not accessibility clicks): tap the button's centre. */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun tapCentre(n: AccessibilityNodeInfo) {
+        val r = Rect().also { n.getBoundsInScreen(it) }
+        gesture(GestureDescription.StrokeDescription(point(r.exactCenterX(), r.exactCenterY()), 0, 40))
+    }
+
+    /** The ✕ under (or within a few dp of) the pointer, topmost window first. */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun closeButtonAt(x: Float, y: Float): Pair<String, AccessibilityNodeInfo>? {
+        val slop = (10 * density()).toInt()
+        return closeButtons().firstOrNull { (_, n) ->
+            Rect().also { n.getBoundsInScreen(it) }.apply { inset(-slop, -slop) }.contains(x.toInt(), y.toInt())
+        }
+    }
+
     /** Clicks the ✕ on a window's title bar (Android's desktop-mode caption, top-right corner). */
     @RequiresApi(Build.VERSION_CODES.R)
     private fun closeWindow(w: AppWindow) {
+        closeButtons().firstOrNull { it.first == w.pkg }?.let { (_, n) -> tapCentre(n); return }
         val dp = density()
         val x = w.bounds.right - CAPTION_CLOSE_DX_DP * dp
         val y = w.bounds.top + CAPTION_Y_DP * dp
@@ -762,6 +785,8 @@ object DesktopMode {
         windows.firstOrNull { it.pkg == pkg }?.let { closeWindow(it); afterClose(pkg) }
     }
 
+    /** Android's desktop-mode title bar ✕ (DecorCaptionView). */
+    private const val CLOSE_BUTTON_ID = "android:id/close_window"
     private const val CAPTION_CLOSE_DX_DP = 22f
     private const val CAPTION_Y_DP = 21f
     /** App being closed and reopened by [place]; its window is briefly missing. */
