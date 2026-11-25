@@ -35,6 +35,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.mandatorySystemGestures
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -209,9 +212,12 @@ private fun AppsPane(
     val follower = remember(listState) { RailFollower(listState) }
 
     val railLeft = !prefs.railOnRight
+    val navGap = sideNavigationGap()
     // hidden = the invisible strip on the other edge: same touch area, the visible bar shows the letter.
     val rail: @Composable (hidden: Boolean) -> Unit = { hidden ->
+        val onLeft = if (hidden) !railLeft else railLeft
         AlphabetRail(
+            edgeGap = if (onLeft) navGap.first else navGap.second,
             onLeft = if (hidden) !railLeft else railLeft,
             hidden = hidden,
             available = available,
@@ -616,6 +622,7 @@ fun AppIcon(app: AppInfo, sizeDp: Int) {
 /** Vertical A–Z strip: touch or drag to scroll; letters with no apps are dimmed. */
 @Composable
 private fun AlphabetRail(
+    edgeGap: Dp,
     onLeft: Boolean,
     hidden: Boolean,
     available: Set<Char>,
@@ -627,7 +634,7 @@ private fun AlphabetRail(
     val compact = DuetApp.instance.prefs.compactRail
     // zIndex: the active letter pops out over the list beside it.
     val placement = if (hidden) Modifier.alpha(0f) else Modifier.zIndex(1f).glide("rail")
-    BoxWithConstraints(placement.fillMaxHeight().width(if (compact) 34.dp else 36.dp).padding(bottom = 16.dp, top = 16.dp), contentAlignment = Alignment.BottomCenter) {
+    BoxWithConstraints(placement.padding(start = if (onLeft) edgeGap else 0.dp, end = if (onLeft) 0.dp else edgeGap).fillMaxHeight().width(if (compact) 34.dp else 36.dp).padding(bottom = 16.dp, top = 16.dp), contentAlignment = Alignment.BottomCenter) {
     // Short panes (landscape) can't fit every letter in three-quarters of the height: grow to
     // the full height first, and if letters still don't fit, label every other one (the rest
     // become dots; every letter still works under the finger).
@@ -686,6 +693,31 @@ private fun AlphabetRail(
     }
     }
     }
+}
+
+/**
+ * Room to leave at the (left, right) screen edges so the alphabet bar stays out of the system's
+ * navigation gesture strip. Sliding along that strip is Android's "switch apps" gesture, so the
+ * system takes over a drag there. On the Surface Duo in landscape the strip runs down a side
+ * edge, reported only through Duo-specific insets that the standard APIs read as zero, so it's
+ * worked out from the rotation (60 px wide on the Duo 2).
+ */
+@Composable
+private fun sideNavigationGap(): Pair<Dp, Dp> {
+    val density = LocalDensity.current
+    val dir = androidx.compose.ui.platform.LocalLayoutDirection.current
+    androidx.compose.ui.platform.LocalConfiguration.current // re-read after rotating
+    val insets = WindowInsets.navigationBars.union(WindowInsets.mandatorySystemGestures)
+    var left = with(density) { insets.getLeft(this, dir).toDp() }
+    var right = with(density) { insets.getRight(this, dir).toDp() }
+    if (android.os.Build.MANUFACTURER.equals("Microsoft", ignoreCase = true)) {
+        val duo = with(density) { 60.toDp() } + 4.dp
+        when (androidx.compose.ui.platform.LocalView.current.display?.rotation) {
+            android.view.Surface.ROTATION_90 -> right = maxOf(right, duo)
+            android.view.Surface.ROTATION_270 -> left = maxOf(left, duo)
+        }
+    }
+    return left to right
 }
 
 /** Height one rail letter needs to be readable and touchable on its own. */
