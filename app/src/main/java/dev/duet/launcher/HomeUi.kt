@@ -627,9 +627,15 @@ private fun AlphabetRail(
     val compact = DuetApp.instance.prefs.compactRail
     // zIndex: the active letter pops out over the list beside it.
     val placement = if (hidden) Modifier.alpha(0f) else Modifier.zIndex(1f).glide("rail")
-    Box(placement.fillMaxHeight().width(if (compact) 34.dp else 36.dp).padding(bottom = 16.dp, top = 16.dp), contentAlignment = Alignment.BottomCenter) {
+    BoxWithConstraints(placement.fillMaxHeight().width(if (compact) 34.dp else 36.dp).padding(bottom = 16.dp, top = 16.dp), contentAlignment = Alignment.BottomCenter) {
+    // Short panes (landscape) can't fit every letter in three-quarters of the height: grow to
+    // the full height first, and if letters still don't fit, label every other one (the rest
+    // become dots; every letter still works under the finger).
+    val needed = RAIL_LETTER_DP.dp * LETTERS.length + 16.dp
+    val railHeight = if (compact) maxOf(maxHeight * 0.75f, minOf(maxHeight, needed)) else maxHeight
+    val roomy = (railHeight - 16.dp) / LETTERS.length >= RAIL_LETTER_DP.dp
     Box(
-        Modifier.fillMaxHeight(if (compact) 0.75f else 1f).width(if (compact) 26.dp else 28.dp),
+        Modifier.height(railHeight).width(if (compact) 26.dp else 28.dp),
     ) {
     // Glass behind the letters (separate so the active letter can pop out sideways unclipped).
     Box(Modifier.matchParentSize().glass(RoundedCornerShape(14.dp), strength = 0.8f))
@@ -655,12 +661,14 @@ private fun AlphabetRail(
         verticalArrangement = Arrangement.SpaceEvenly,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LETTERS.forEach { c ->
+        LETTERS.forEachIndexed { i, c ->
             val highlight by animateFloatAsState(if (c == active) 1f else 0f, tween(120), label = "rail")
+            val label = roomy || i % 2 == 0 || c == active
             Text(
-                c.toString(),
+                if (label) c.toString() else "•",
                 style = OnWallpaper,
-                fontSize = if (compact) 10.5.sp else 11.sp,
+                fontSize = if (!roomy) 9.5.sp else if (compact) 10.5.sp else 11.sp,
+                lineHeight = if (!roomy) 10.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
                 fontWeight = if (c == active) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier.graphicsLayer {
                     val scale = 1f + 0.5f * highlight
@@ -679,6 +687,9 @@ private fun AlphabetRail(
     }
     }
 }
+
+/** Height one rail letter needs to be readable and touchable on its own. */
+private const val RAIL_LETTER_DP = 14
 
 @Composable
 private fun LetterBubble(letter: Char, modifier: Modifier) {
