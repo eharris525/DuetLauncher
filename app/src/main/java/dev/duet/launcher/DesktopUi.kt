@@ -326,7 +326,7 @@ private fun Taskbar(modifier: Modifier) {
     val panel = DesktopMode.panel
     val notifications = GlanceMirrorService.shown.size
 
-    Box(modifier.fillMaxWidth().height(taskbarDp()).background(BarColor).padding(horizontal = 8.dp)) {
+    Box(modifier.fillMaxWidth().height(with(LocalDensity.current) { DesktopMode.barDrawPx().toDp() }).background(BarColor).padding(horizontal = 8.dp)) {
         Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             BarButton(selected = DesktopMode.menuOpen, onClick = { DesktopMode.toggleMenu() }) { BarIcon(BarGlyph.APPS, MaterialTheme.colorScheme.primary, BarIconSize) }
             BarButton(selected = panel == DesktopPanel.RECENTS, onClick = { togglePanel(DesktopPanel.RECENTS) }) { BarIcon(BarGlyph.RECENTS, tint, BarIconSize) }

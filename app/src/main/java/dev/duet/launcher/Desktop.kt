@@ -155,6 +155,13 @@ object DesktopMode {
         return maxOf(own, reserved)
     }
 
+    /**
+     * Height the taskbar is drawn at. It can be thinner than [taskbarPx]: the rest of Android's
+     * reserved strip above it is left black (see-through on display glasses), since no app can
+     * use it anyway.
+     */
+    fun barDrawPx(): Int = minOf((TASKBAR_DP * density()).toInt(), taskbarPx())
+
     /** Opens activities on the desktop in Android's full-screen mode even when the display defaults to windows. */
     fun fullscreenOptions(displayId: Int): ActivityOptions {
         val o = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
@@ -937,7 +944,7 @@ object DesktopMode {
 
         private fun layoutAll() {
             val (w, h) = size(ctx.display!!)
-            val bar = taskbarPx()
+            val bar = barDrawPx()
             val expanded = menuOpen || contextMenu != null || panel != null
             shellParams.width = w
             shellParams.height = when { expanded -> h; taskbarHidden -> 2; else -> bar }

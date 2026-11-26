@@ -84,17 +84,33 @@ fun BarIcon(g: BarGlyph, color: Color, modifier: Modifier = Modifier.size(22.dp)
         val w = s * 0.085f
         val st = Stroke(width = w, cap = StrokeCap.Round, join = StrokeJoin.Round)
         when (g) {
-            BarGlyph.APPS -> for (r in 0..2) for (c in 0..2)
-                drawCircle(color, s * 0.075f, Offset(s * (0.22f + c * 0.28f), s * (0.22f + r * 0.28f)))
-            BarGlyph.RECENTS -> {
-                drawLine(color, Offset(s * 0.2f, s * 0.2f), Offset(s * 0.2f, s * 0.8f), w, StrokeCap.Round)
-                drawLine(color, Offset(s * 0.5f, s * 0.2f), Offset(s * 0.5f, s * 0.8f), w, StrokeCap.Round)
-                drawLine(color, Offset(s * 0.8f, s * 0.2f), Offset(s * 0.8f, s * 0.8f), w, StrokeCap.Round)
+            BarGlyph.APPS -> {
+                // Duet's mark: the Duo open, two screens either side of the hinge.
+                val top = s * 0.14f; val hgt = s * 0.72f; val pw = s * 0.33f; val gap = s * 0.08f
+                val left = (s - pw * 2 - gap) / 2
+                drawRoundRect(color, Offset(left, top), Size(pw, hgt), CornerRadius(s * 0.09f))
+                drawRoundRect(color, Offset(left + pw + gap, top), Size(pw, hgt), CornerRadius(s * 0.09f), style = st)
             }
-            BarGlyph.HOME -> drawRoundRect(color, Offset(s * 0.2f, s * 0.2f), Size(s * 0.6f, s * 0.6f), CornerRadius(s * 0.16f), style = st)
-            BarGlyph.BACK -> drawPath(Path().apply {
-                moveTo(s * 0.62f, s * 0.2f); lineTo(s * 0.3f, s * 0.5f); lineTo(s * 0.62f, s * 0.8f)
-            }, color, style = st)
+            BarGlyph.RECENTS -> {
+                // A fan of window cards.
+                drawRoundRect(color.copy(alpha = 0.45f), Offset(s * 0.30f, s * 0.12f), Size(s * 0.56f, s * 0.46f), CornerRadius(s * 0.08f), style = st)
+                drawRoundRect(color, Offset(s * 0.14f, s * 0.36f), Size(s * 0.56f, s * 0.46f), CornerRadius(s * 0.08f), style = st)
+                drawLine(color, Offset(s * 0.14f, s * 0.50f), Offset(s * 0.70f, s * 0.50f), w * 0.8f)
+            }
+            BarGlyph.HOME -> {
+                // The desktop: a screen with a horizon and a small sun.
+                drawRoundRect(color, Offset(s * 0.12f, s * 0.2f), Size(s * 0.76f, s * 0.6f), CornerRadius(s * 0.1f), style = st)
+                drawLine(color, Offset(s * 0.12f, s * 0.62f), Offset(s * 0.88f, s * 0.62f), w, StrokeCap.Round)
+                drawCircle(color, s * 0.08f, Offset(s * 0.64f, s * 0.42f))
+            }
+            BarGlyph.BACK -> {
+                // A curved return arrow.
+                drawArc(color, -90f, 180f, false, Offset(s * 0.32f, s * 0.22f), Size(s * 0.5f, s * 0.5f), style = st)
+                drawLine(color, Offset(s * 0.57f, s * 0.72f), Offset(s * 0.3f, s * 0.72f), w, StrokeCap.Round)
+                drawPath(Path().apply {
+                    moveTo(s * 0.42f, s * 0.6f); lineTo(s * 0.28f, s * 0.72f); lineTo(s * 0.42f, s * 0.84f)
+                }, color, style = st)
+            }
             BarGlyph.BELL -> {
                 drawPath(Path().apply {
                     moveTo(s * 0.2f, s * 0.72f)
