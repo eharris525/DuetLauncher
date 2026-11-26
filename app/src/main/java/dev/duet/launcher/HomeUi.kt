@@ -628,23 +628,11 @@ private fun AppRow(
             }
             Text(app.label, style = OnWallpaper, fontSize = labelSize.sp, maxLines = 1)
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(
-                text = { Text(if (isFavorite) "Remove from favorites" else "Add to favorites") },
-                onClick = { menu = false; prefs.toggleFavorite(app.key) },
-            )
-            if (isFavorite && large) {
-                if (canMoveUp) DropdownMenuItem(text = { Text("Move up") }, onClick = { menu = false; prefs.moveFavorite(app.key, -1) })
-                if (canMoveDown) DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; prefs.moveFavorite(app.key, 1) })
-            }
-            DropdownMenuItem(text = { Text("Hide") }, onClick = {
-                menu = false
-                prefs.hidden = prefs.hidden + app.key
-                prefs.favorites = prefs.favorites - app.key
-            })
-            DropdownMenuItem(text = { Text("App info") }, onClick = { menu = false; repo.openInfo(app) })
-            DropdownMenuItem(text = { Text("Uninstall") }, onClick = { menu = false; repo.uninstall(app) })
-        }
+        if (menu) AppMenu(
+            app, isFavorite,
+            canMove = isFavorite && large, canMoveUp = canMoveUp, canMoveDown = canMoveDown,
+            onDismiss = { menu = false }, onLaunched = onLaunched,
+        )
     }
 }
 

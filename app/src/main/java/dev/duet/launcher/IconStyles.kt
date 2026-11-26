@@ -108,7 +108,7 @@ enum class IconStyle(val title: String, val summary: String) {
         return out
     }
 
-    private companion object {
+    companion object {
         /**
          * The icon's main colour: its most common strongly coloured hue (so a white logo on a red
          * tile gives red), or its average colour when it's mostly grey.
