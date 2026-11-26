@@ -421,11 +421,14 @@ object DesktopMode {
         val speed = kotlin.math.hypot(vx, vy)
         val fling = speed >= FLING_MIN_DP_S * density()
         var s = scroll
-        if (s == null && fling && display != null) {
-            // A quick flick that ended before the scroll had touched down: start it now.
+        if (s == null && speed >= FLICK_START_DP_S * density() && display != null) {
+            // A fast flick that ended before the scroll had touched down: start it now, already
+            // moving well past the tap distance so the app can only read it as a swipe.
             val (w, h) = size(display!!)
-            scrollX = pointerX.coerceIn(2f, w - 3f); scrollY = pointerY.coerceIn(2f, h - 3f)
-            s = LiveStroke(scrollX, scrollY)
+            val x = pointerX.coerceIn(2f, w - 3f); val y = pointerY.coerceIn(2f, h - 3f)
+            val lead = SCROLL_START_DP * density()
+            scrollX = (x + vx / speed * lead).coerceIn(1f, w - 2f); scrollY = (y + vy / speed * lead).coerceIn(1f, h - 2f)
+            if (kotlin.math.hypot(scrollX - x, scrollY - y) >= lead * 0.8f) s = LiveStroke(x, y, scrollX, scrollY)
         }
         android.util.Log.d(SCROLL_TAG, "up at $scrollX,$scrollY speed=${speed.toInt()}px/s")
         if (s != null && fling && display != null) {
@@ -441,6 +444,8 @@ object DesktopMode {
     private const val SCROLL_START_DP = 14f
     /** Slower than this when lifting and the page just stops. */
     private const val FLING_MIN_DP_S = 250f
+    /** A flick this fast still scrolls even if the fingers lifted before the scroll began; slower ones are ignored. */
+    private const val FLICK_START_DP_S = 700f
     private const val FLICK_MS = 40
     private const val SCROLL_TAG = "DuetScroll"
 
@@ -462,6 +467,9 @@ object DesktopMode {
         private var finished = false
         private var nudge = 0.5f
         private var lastAt = SystemClock.uptimeMillis() - 16
+        /** The finger was dropped by Android and has to touch down again. */
+        private var restarted = false
+        private val restartPx = SCROLL_START_DP * density()
 
         init { send() }
 
@@ -484,6 +492,14 @@ object DesktopMode {
             var duration = (now - lastAt).coerceIn(8, 60)
             lastAt = now
             var ex = toX; var ey = toY
+            if (current == null && restarted) {
+                // Android dropped the finger (another gesture interrupted it). Pressing down again
+                // and lifting soon after would be a tap on whatever is under it, so only come back
+                // when there's a real scroll still to make, and never just to lift.
+                if (ending) { finished = true; return }
+                if (kotlin.math.hypot(toX - atX, toY - atY) < restartPx) return
+                restarted = false
+            }
             if (ex == atX && ey == atY) {
                 // A stroke needs some length: wiggle by half a pixel (alternating so it doesn't drift).
                 ex = atX + nudge; nudge = -nudge
@@ -506,7 +522,7 @@ object DesktopMode {
             gesture(stroke) { completed ->
                 busy = false
                 // If Android dropped the stroke, the finger is up: start a fresh one from here.
-                if (!completed) { current = null; android.util.Log.d(SCROLL_TAG, "stroke dropped; restarting") }
+                if (!completed) { current = null; restarted = true; android.util.Log.d(SCROLL_TAG, "stroke dropped") }
                 if (!finished && (ending || toX != atX || toY != atY)) send()
             }
         }
@@ -866,7 +882,7 @@ object DesktopMode {
         if (!menuOpen) query = ""
     }
 
-    const val TASKBAR_DP = 52
+    const val TASKBAR_DP = 40
     /** See [desktopBounds]. */
     const val EDGE_PX = 8
 

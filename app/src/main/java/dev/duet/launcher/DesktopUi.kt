@@ -63,6 +63,7 @@ import java.text.DateFormat
 import java.util.Date
 
 private val BarColor = Color(0xFF161A20)
+private val BarIconSize = Modifier.size(18.dp)
 private val MenuColor = Color(0xF01B2028)
 
 /** Taskbar along the bottom of the external display, plus the start menu and right-click menus when open. */
@@ -327,17 +328,17 @@ private fun Taskbar(modifier: Modifier) {
 
     Box(modifier.fillMaxWidth().height(taskbarDp()).background(BarColor).padding(horizontal = 8.dp)) {
         Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            BarButton(selected = DesktopMode.menuOpen, onClick = { DesktopMode.toggleMenu() }) { BarIcon(BarGlyph.APPS, MaterialTheme.colorScheme.primary) }
-            BarButton(selected = panel == DesktopPanel.RECENTS, onClick = { togglePanel(DesktopPanel.RECENTS) }) { BarIcon(BarGlyph.RECENTS, tint) }
-            BarButton(onClick = { DesktopMode.panel = null; DesktopMode.showDesktop() }) { BarIcon(BarGlyph.HOME, tint) }
-            BarButton(onClick = { DesktopMode.panel = null; DesktopMode.back() }) { BarIcon(BarGlyph.BACK, tint) }
+            BarButton(selected = DesktopMode.menuOpen, onClick = { DesktopMode.toggleMenu() }) { BarIcon(BarGlyph.APPS, MaterialTheme.colorScheme.primary, BarIconSize) }
+            BarButton(selected = panel == DesktopPanel.RECENTS, onClick = { togglePanel(DesktopPanel.RECENTS) }) { BarIcon(BarGlyph.RECENTS, tint, BarIconSize) }
+            BarButton(onClick = { DesktopMode.panel = null; DesktopMode.showDesktop() }) { BarIcon(BarGlyph.HOME, tint, BarIconSize) }
+            BarButton(onClick = { DesktopMode.panel = null; DesktopMode.back() }) { BarIcon(BarGlyph.BACK, tint, BarIconSize) }
         }
         Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             pinned.forEach { a ->
                 BarButton(
                     running = a.component.packageName in running, active = DesktopMode.activeWindow?.pkg == a.component.packageName,
                     onClick = { DesktopMode.launch(a) }, onRightClick = { showContextMenu(a.component.packageName) },
-                ) { AppIcon(a, 30) }
+                ) { AppIcon(a, 24) }
             }
             if (others.isNotEmpty() && pinned.isNotEmpty()) {
                 Box(Modifier.width(1.dp).height(24.dp).background(Color.White.copy(alpha = 0.2f)))
@@ -346,18 +347,18 @@ private fun Taskbar(modifier: Modifier) {
                 BarButton(
                     running = true, active = DesktopMode.activeWindow?.pkg == a.component.packageName,
                     onClick = { DesktopMode.launch(a) }, onRightClick = { showContextMenu(a.component.packageName) },
-                ) { AppIcon(a, 30) }
+                ) { AppIcon(a, 24) }
             }
         }
         Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
-            BarButton(onClick = { DesktopMode.openTouchpad() }) { BarIcon(BarGlyph.KEYBOARD, tint) }
+            BarButton(onClick = { DesktopMode.openTouchpad() }) { BarIcon(BarGlyph.KEYBOARD, tint, BarIconSize) }
             BatteryTray()
             BarButton(selected = panel == DesktopPanel.NOTIFICATIONS, onClick = { togglePanel(DesktopPanel.NOTIFICATIONS) }) {
-                BarIcon(BarGlyph.BELL, tint)
+                BarIcon(BarGlyph.BELL, tint, BarIconSize)
                 if (notifications > 0) Box(
-                    Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(16.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp).size(13.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
-                ) { Text(if (notifications > 9) "9+" else "$notifications", fontSize = 9.sp, color = Color.Black) }
+                ) { Text(if (notifications > 9) "9+" else "$notifications", fontSize = 8.sp, lineHeight = 8.sp, color = Color.Black) }
             }
             TrayClock { togglePanel(DesktopPanel.NOTIFICATIONS) }
         }
@@ -371,7 +372,7 @@ private fun BarButton(
     onClick: () -> Unit, onRightClick: (() -> Unit)? = null, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
     Box(
-        Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
+        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
             .background(if (selected || active) Color.White.copy(alpha = 0.14f) else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onRightClick),
         contentAlignment = Alignment.Center,

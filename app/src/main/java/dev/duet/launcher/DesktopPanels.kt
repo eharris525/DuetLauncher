@@ -134,7 +134,7 @@ fun BatteryTray() {
     if (level < 0) return
     val tint = if (level <= 15 && charging == 0) Color(0xFFFF8A80) else Color.White.copy(alpha = 0.85f)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp)) {
-        Canvas(Modifier.size(width = 22.dp, height = 12.dp)) {
+        Canvas(Modifier.size(width = 19.dp, height = 10.dp)) {
             val h = size.height; val bw = size.width - 3.dp.toPx()
             drawRoundRect(tint, Offset.Zero, Size(bw, h), CornerRadius(3.dp.toPx()), style = Stroke(1.5.dp.toPx()))
             drawRect(tint, Offset(bw + 0.5.dp.toPx(), h * 0.3f), Size(2.dp.toPx(), h * 0.4f))
@@ -142,7 +142,7 @@ fun BatteryTray() {
             drawRoundRect(tint, Offset(inset, inset), Size((bw - inset * 2) * level / 100f, h - inset * 2), CornerRadius(1.5.dp.toPx()))
         }
         Spacer(Modifier.width(5.dp))
-        Text((if (charging != 0) "⚡" else "") + "$level%", fontSize = 12.sp, color = tint)
+        Text((if (charging != 0) "⚡" else "") + "$level%", fontSize = 11.sp, color = tint)
     }
 }
 
@@ -308,11 +308,11 @@ fun TrayClock(onClick: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000L - now % 1000L) } }
     Column(
-        Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
+        Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.End,
     ) {
-        Text(java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(now)), fontSize = 14.sp, color = Color.White)
-        Text(java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(now)), fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+        Text(java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(now)), fontSize = 12.sp, lineHeight = 13.sp, color = Color.White)
+        Text(java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(now)), fontSize = 10.sp, lineHeight = 11.sp, color = Color.White.copy(alpha = 0.7f))
     }
 }
 
