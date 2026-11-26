@@ -193,28 +193,57 @@ enum class IconStyle(val title: String, val summary: String) {
          */
         fun isolate(b: Bitmap) {
             val w = b.width; val h = b.height
-            val probes = listOf(0.2f to 0.5f, 0.8f to 0.5f, 0.5f to 0.2f, 0.5f to 0.8f, 0.24f to 0.24f, 0.76f to 0.76f)
-                .map { (fx, fy) -> b.getPixel((w * fx).toInt().coerceIn(0, w - 1), (h * fy).toInt().coerceIn(0, h - 1)) }
-                .filter { Color.alpha(it) > 200 }
-            if (probes.size < 4) return
-            // The most common probe colour is the background.
-            val bg = probes.maxBy { p -> probes.count { dist(it, p) < 40f } }
-            if (probes.count { dist(it, bg) < 40f } < 3) return
             val px = IntArray(w * h)
             b.getPixels(px, 0, w, 0, 0, w, h)
+            fun lum(c: Int) = (0.299f * Color.red(c) + 0.587f * Color.green(c) + 0.114f * Color.blue(c))
+            // A ring well inside the tile: on a background-filled icon it's almost all background.
+            val ring = (0 until 48).map { i ->
+                val t = i / 48f * 2 * Math.PI
+                val x = (w / 2f + kotlin.math.cos(t).toFloat() * w * 0.38f).toInt().coerceIn(0, w - 1)
+                val y = (h / 2f + kotlin.math.sin(t).toFloat() * h * 0.38f).toInt().coerceIn(0, h - 1)
+                px[y * w + x]
+            }
+            // Mostly see-through there: the icon is already just a symbol.
+            if (ring.count { Color.alpha(it) > 200 } < ring.size * 0.6f) return
+
+            // Split the opaque pixels into darker and lighter groups (Otsu's threshold); whichever
+            // group the ring mostly falls in is the background, even when it's a gradient.
+            val hist = IntArray(256)
+            var total = 0
+            for (c in px) if (Color.alpha(c) > 128) { hist[lum(c).toInt().coerceIn(0, 255)]++; total++ }
+            if (total == 0) return
+            var sumAll = 0.0
+            for (i in 0..255) sumAll += i * hist[i].toDouble()
+            var sumB = 0.0; var wB = 0; var best = 0.0; var threshold = 128
+            for (i in 0..255) {
+                wB += hist[i]; if (wB == 0) continue
+                val wF = total - wB; if (wF == 0) break
+                sumB += i * hist[i].toDouble()
+                val mB = sumB / wB; val mF = (sumAll - sumB) / wF
+                val between = wB.toDouble() * wF * (mB - mF) * (mB - mF)
+                if (between > best) { best = between; threshold = i }
+            }
+            val opaqueRing = ring.filter { Color.alpha(it) > 200 }
+            val bgIsLight = opaqueRing.count { lum(it) > threshold } > opaqueRing.size / 2
+            // Too little contrast to tell a symbol apart: leave the icon whole.
+            val spread = kotlin.math.abs(opaqueRing.map { lum(it) }.average() - threshold)
+            if (spread < 12) return
+
+            val soft = 18f
+            val out = IntArray(px.size)
+            var kept = 0
             for (i in px.indices) {
                 val c = px[i]
                 val a = Color.alpha(c)
                 if (a == 0) continue
-                val keep = ((dist(c, bg) - 28f) / 70f).coerceIn(0f, 1f)
-                px[i] = Color.argb((a * keep).toInt(), Color.red(c), Color.green(c), Color.blue(c))
+                val l = lum(c)
+                val k = (if (bgIsLight) (threshold - l + soft / 2) / soft else (l - threshold + soft / 2) / soft).coerceIn(0f, 1f)
+                if (k > 0.5f) kept++
+                out[i] = Color.argb((a * k).toInt(), Color.red(c), Color.green(c), Color.blue(c))
             }
-            b.setPixels(px, 0, w, 0, 0, w, h)
-        }
-
-        private fun dist(a: Int, b: Int): Float {
-            val dr = (Color.red(a) - Color.red(b)).toFloat(); val dg = (Color.green(a) - Color.green(b)).toFloat(); val db = (Color.blue(a) - Color.blue(b)).toFloat()
-            return kotlin.math.sqrt(dr * dr + dg * dg + db * db)
+            // Nearly nothing or nearly everything kept means the split didn't find a symbol.
+            if (kept < total * 0.02f || kept > total * 0.7f) return
+            b.setPixels(out, 0, w, 0, 0, w, h)
         }
 
         fun sepia() = ColorMatrixColorFilter(ColorMatrix().apply {
