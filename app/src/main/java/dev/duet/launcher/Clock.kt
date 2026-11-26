@@ -12,7 +12,13 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -200,7 +206,7 @@ private fun ClockPill(activity: MainActivity) {
                     },
                     onLongClick = { menu = true },
                 )
-                .padding(start = 30.dp, end = 32.dp, top = 10.dp, bottom = 12.dp),
+                .padding(start = 30.dp, end = if (DuetApp.instance.prefs.aiButton) 14.dp else 32.dp, top = 10.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(time, style = OnWallpaper, fontSize = 54.sp, fontWeight = FontWeight.Light)
@@ -211,6 +217,10 @@ private fun ClockPill(activity: MainActivity) {
             Column {
                 Text(weekday, style = OnWallpaper, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 Text(date, style = OnWallpaper, fontSize = 15.sp, color = Color.White.copy(alpha = 0.8f))
+            }
+            if (DuetApp.instance.prefs.aiButton) {
+                Spacer(Modifier.width(18.dp))
+                AiButton(onLongClick = { activity.openSettings() })
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -225,3 +235,37 @@ private fun ClockPill(activity: MainActivity) {
     }
 }
 
+
+/** Starts a voice chat with the chosen AI app. Long-press opens Settings to pick another. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AiButton(onLongClick: () -> Unit) {
+    val ctx = LocalContext.current
+    Box(
+        Modifier.size(46.dp).clip(CircleShape).glass(CircleShape, strength = 0.8f)
+            .combinedClickable(
+                onClick = { Assistant.startVoice(ctx, DuetApp.instance.prefs.aiApp, ScreenCoverage.tapTarget()) },
+                onLongClick = onLongClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        val tint = accent
+        Canvas(Modifier.size(22.dp)) { drawSparkle(tint) }
+    }
+}
+
+/** A four-pointed sparkle with a small one beside it: the usual "AI" mark. */
+private fun DrawScope.drawSparkle(c: Color) {
+    fun star(cx: Float, cy: Float, r: Float) = Path().apply {
+        val k = r * 0.22f
+        moveTo(cx, cy - r)
+        quadraticTo(cx + k, cy - k, cx + r, cy)
+        quadraticTo(cx + k, cy + k, cx, cy + r)
+        quadraticTo(cx - k, cy + k, cx - r, cy)
+        quadraticTo(cx - k, cy - k, cx, cy - r)
+        close()
+    }
+    val s = size.minDimension
+    drawPath(star(s * 0.42f, s * 0.58f, s * 0.42f), c)
+    drawPath(star(s * 0.82f, s * 0.18f, s * 0.18f), c)
+}

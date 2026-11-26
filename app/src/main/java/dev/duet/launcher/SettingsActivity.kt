@@ -1,9 +1,16 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package dev.duet.launcher
 
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.text.font.FontFamily
@@ -119,6 +126,8 @@ private fun SettingsScreen(activity: SettingsActivity) {
     /** Which gesture's action is being chosen: "tap" or "swipe" (null = no dialog). */
     var actionDialog by remember { mutableStateOf<String?>(null) }
     var appPickerFor by remember { mutableStateOf<String?>(null) }
+    var aiDialog by remember { mutableStateOf(false) }
+    var styleDialog by remember { mutableStateOf(false) }
     val packs by produceState(emptyList<IconPack.Info>()) { value = withContext(Dispatchers.IO) { IconPack.installed(ctx) } }
     val packLabel = packs.firstOrNull { it.pkg == prefs.iconPack }?.label
         ?: if (prefs.iconPack.isEmpty()) "System icons" else prefs.iconPack
@@ -151,22 +160,16 @@ private fun SettingsScreen(activity: SettingsActivity) {
             item { SliderRow("Icon size", prefs.iconSizeDp, 24..64, "dp") { prefs.iconSizeDp = it } }
             item { SliderRow("Label size", prefs.labelSizeSp, 14..34, "sp") { prefs.labelSizeSp = it } }
 
-            item { Section("Style") }
-            items(SurfaceStyle.entries) { style ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { prefs.surfaceStyle = style }.padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = prefs.surfaceStyle == style, onClick = { prefs.surfaceStyle = style })
-                    Column(Modifier.padding(start = 8.dp)) {
-                        Text(style.title)
-                        Text(style.summary, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
-                    }
+            item { Section("Theme") }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                    items(ThemePreset.entries) { t -> ThemeCard(t, t.isCurrent(prefs)) { t.apply(prefs) } }
                 }
             }
+            item { ActionRow("Panel style", prefs.surfaceStyle.title) { styleDialog = true } }
             item {
                 Text("Accent colour · ${prefs.accent.title}", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     AccentColor.entries.forEach { a ->
                         Box(
                             Modifier.size(36.dp).clip(CircleShape).background(a.color)
@@ -176,6 +179,7 @@ private fun SettingsScreen(activity: SettingsActivity) {
                     }
                 }
             }
+            item { SliderRow("Dim wallpaper", prefs.wallpaperDim, 0..60, "%") { prefs.wallpaperDim = it } }
 
             item { Section("Font") }
             item { ActionRow("Font", prefs.font.title) { fontDialog = true } }
@@ -274,6 +278,13 @@ private fun SettingsScreen(activity: SettingsActivity) {
             item { SwitchRow("Show the button", prefs.actionButton, "Round button in the bottom-right corner") { prefs.actionButton = it } }
             item { ActionRow("Tap", prefs.tapAction.describe(prefs.tapApp)) { actionDialog = "tap" } }
             item { ActionRow("Swipe up", prefs.swipeAction.describe(prefs.swipeApp)) { actionDialog = "swipe" } }
+
+            item { Section("AI button") }
+            item { SwitchRow("Show the AI button", prefs.aiButton, "On the clock. Tap it to start a voice chat") { prefs.aiButton = it } }
+            if (prefs.aiButton) item { ActionRow("AI app", Assistant.labelOf(ctx, prefs.aiApp)) { aiDialog = true } }
+
+            item { Section("Google feed") }
+            item { SwitchRow("Swipe right for the Google feed", prefs.googleFeed, "Swipe right on the home screen to open Google Discover (needs the Google app)") { prefs.googleFeed = it } }
 
             item { Section("Widgets") }
             item {
@@ -429,6 +440,55 @@ private fun SettingsScreen(activity: SettingsActivity) {
         )
     }
 
+    if (styleDialog) {
+        AlertDialog(
+            onDismissRequest = { styleDialog = false },
+            confirmButton = { TextButton(onClick = { styleDialog = false }) { Text("Close") } },
+            title = { Text("Panel style") },
+            text = {
+                LazyColumn {
+                    items(SurfaceStyle.entries) { style ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { prefs.surfaceStyle = style }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = prefs.surfaceStyle == style, onClick = null)
+                            Column(Modifier.padding(start = 12.dp)) {
+                                Text(style.title)
+                                Text(style.summary, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    if (aiDialog) {
+        val choices = remember { Assistant.installed(ctx) }
+        AlertDialog(
+            onDismissRequest = { aiDialog = false },
+            confirmButton = { TextButton(onClick = { aiDialog = false }) { Text("Close") } },
+            title = { Text("AI app") },
+            text = {
+                LazyColumn {
+                    item {
+                        Text(
+                            "The AI button opens this app's voice chat when it has one, and otherwise opens the app.",
+                            fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    item { PackChoice("Default assistant (the phone's)", prefs.aiApp.isEmpty()) { prefs.aiApp = ""; aiDialog = false } }
+                    items(choices, key = { it.pkg }) { c -> PackChoice(c.label, prefs.aiApp == c.pkg) { prefs.aiApp = c.pkg; aiDialog = false } }
+                    if (choices.isEmpty()) item {
+                        Text("No AI apps found. Install ChatGPT, Gemini, Claude, Copilot or another one, then come back.",
+                            fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            },
+        )
+    }
+
     if (hiddenDialog) {
         AlertDialog(
             onDismissRequest = { hiddenDialog = false },
@@ -507,5 +567,50 @@ private fun PackChoice(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         RadioButton(selected = selected, onClick = onClick)
         Text(label, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+/** A theme preset: a small preview of its panel on a stand-in wallpaper, and its name. */
+@Composable
+private fun ThemeCard(t: ThemePreset, selected: Boolean, onClick: () -> Unit) {
+    val prefs = DuetApp.instance.prefs
+    Column(
+        Modifier.width(112.dp).clip(RoundedCornerShape(16.dp))
+            .border(if (selected) 2.dp else 1.dp, if (selected) t.accent.color else Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick).padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(10.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF3B5B8C), Color(0xFF8C4B6A), Color(0xFF2E6B5A))))
+                .background(Color.Black.copy(alpha = t.dim / 100f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            // Preview the preset's panel style without changing the real one.
+            val shape = RoundedCornerShape(50)
+            Box(
+                Modifier.size(width = 80.dp, height = 30.dp).then(previewPanel(t, shape)),
+                contentAlignment = Alignment.Center,
+            ) { Text("12:30", fontSize = 13.sp, color = Color.White, fontFamily = remember(t) { t.font.family(DuetApp.instance) }) }
+            Box(Modifier.align(Alignment.BottomEnd).padding(6.dp).size(10.dp).clip(CircleShape).background(t.accent.color))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(t.title, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+private fun previewPanel(t: ThemePreset, shape: androidx.compose.ui.graphics.Shape): Modifier {
+    val a = t.accent.color
+    val m = Modifier.clip(shape)
+    return when (t.style) {
+        SurfaceStyle.LIQUID_GLASS -> m.background(Color.Black.copy(alpha = 0.2f)).background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.06f)))).border(1.dp, Color.White.copy(alpha = 0.5f), shape)
+        SurfaceStyle.FROSTED -> m.background(Color.White.copy(alpha = 0.2f)).border(1.dp, Color.White.copy(alpha = 0.25f), shape)
+        SurfaceStyle.SOLID -> m.background(Color(0xFF1B1C20).copy(alpha = 0.92f))
+        SurfaceStyle.OUTLINE -> m.border(1.dp, Color.White.copy(alpha = 0.6f), shape)
+        SurfaceStyle.MINIMAL -> m
+        SurfaceStyle.TINTED -> m.background(a.copy(alpha = 0.3f)).border(1.dp, a.copy(alpha = 0.5f), shape)
+        SurfaceStyle.GRADIENT -> m.background(Brush.linearGradient(listOf(a.copy(alpha = 0.6f), Color(0xFF6A3FA0).copy(alpha = 0.45f))))
+        SurfaceStyle.NEON -> m.background(Color(0xFF07090D).copy(alpha = 0.75f)).border(1.5.dp, a, shape)
+        SurfaceStyle.AMOLED -> m.background(Color.Black)
     }
 }

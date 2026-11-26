@@ -16,6 +16,9 @@ import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.graphics.drawable.toBitmap
 
 /**
@@ -63,24 +66,36 @@ class GlanceMirrorService : NotificationListenerService() {
             addAction(Intent.ACTION_USER_PRESENT)
         })
         instance = this
+        refreshShown()
     }
 
     override fun onListenerDisconnected() {
         connected = false
         instance = null
+        shown = emptyList()
         runCatching { unregisterReceiver(screenReceiver) }
         clearAll()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        refreshShown()
         if (away && wanted(sbn)) mirror(sbn)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        refreshShown()
         if (mirrored[sbn.packageName] != sbn.key) return
         // Show the app's next most recent notification instead, if it still has one.
         val next = activeOriginals().filter { it.packageName == sbn.packageName }.maxByOrNull { it.postTime }
         if (next != null && away) mirror(next) else cancelCopy(sbn.packageName)
+    }
+
+    /** Updates [shown]: the notifications desktop mode lists (not Duet's own, not group summaries). */
+    private fun refreshShown() {
+        shown = runCatching { activeNotifications.toList() }.getOrDefault(emptyList())
+            .filter { it.packageName != packageName && it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
+            .filter { it.notification.extras.getCharSequence(Notification.EXTRA_TITLE) != null || it.notification.extras.getCharSequence(Notification.EXTRA_TEXT) != null }
+            .sortedByDescending { it.postTime }
     }
 
     private fun activeOriginals(): List<StatusBarNotification> =
@@ -166,6 +181,13 @@ class GlanceMirrorService : NotificationListenerService() {
         @Volatile var connected = false
             private set
         @Volatile private var instance: GlanceMirrorService? = null
+
+        /** Current notifications, newest first, for desktop mode's notification panel. */
+        var shown by mutableStateOf<List<StatusBarNotification>>(emptyList())
+            private set
+
+        fun dismiss(sbn: StatusBarNotification) { runCatching { instance?.cancelNotification(sbn.key) } }
+        fun dismissAll() { runCatching { instance?.cancelAllNotifications() } }
 
         /** Removes all copies now (e.g. when the feature is switched off). */
         fun clearNow() = instance?.clearAll()

@@ -18,7 +18,7 @@ enum class BuiltInKind(val title: String, val summary: String, val defaultHeight
     CALENDAR("Calendar", "This month, with today highlighted", 250),
     AGENDA("Upcoming events", "Your next few days of events", 200),
     WEATHER("Weather", "Current conditions and today's high and low", 150),
-    MUSIC("Music", "What's playing, with controls", 100),
+    MUSIC("Music", "What's playing, with controls and a seek bar", 112),
     BATTERY("Battery", "Charge level and charging state", 96),
     ALARM("Next alarm", "When your next alarm goes off", 90),
 }

@@ -21,6 +21,9 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.SECONDARY_HOME" />
         </intent>
+        <!-- AI apps for the clock's AI button -->
+        <intent><action android:name="android.intent.action.ASSIST" /></intent>
+        <intent><action android:name="android.intent.action.VOICE_COMMAND" /></intent>
         <!-- Icon pack discovery (ADW / Nova / GO / Apex conventions) -->
         <intent><action android:name="org.adw.launcher.THEMES" /></intent>
         <intent><action android:name="com.novalauncher.THEME" /></intent>

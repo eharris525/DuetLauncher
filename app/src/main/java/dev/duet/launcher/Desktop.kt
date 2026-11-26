@@ -73,6 +73,8 @@ object DesktopMode {
     /** App shown full screen (covering the taskbar), if any. */
     var fullscreenPkg by mutableStateOf<String?>(null)
         private set
+    /** Notification centre or recent-apps view, opened from the taskbar. */
+    var panel by mutableStateOf<DesktopPanel?>(null)
     /** Right-click menu open in the taskbar layer, shown at the pointer. */
     var contextMenu by mutableStateOf<ContextMenu?>(null)
     /** The pointer is resting on the bottom edge, so a hidden taskbar slides back in. */
@@ -83,7 +85,7 @@ object DesktopMode {
 
     /** The taskbar steps aside for a full-screen app (until the pointer touches the bottom edge). */
     val taskbarHidden: Boolean
-        get() = activeWindow?.pkg != null && activeWindow?.pkg == fullscreenPkg && !peek && !menuOpen && contextMenu == null
+        get() = activeWindow?.pkg != null && activeWindow?.pkg == fullscreenPkg && !peek && !menuOpen && contextMenu == null && panel == null
 
     /** Bumped when the touchpad should close (display unplugged). */
     var closeTouchpad by mutableIntStateOf(0)
@@ -782,8 +784,22 @@ object DesktopMode {
     fun close(pkg: String) {
         contextMenu = null
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        windows.firstOrNull { it.pkg == pkg }?.let { closeWindow(it); afterClose(pkg) }
+        val w = windows.firstOrNull { it.pkg == pkg }
+        if (w != null) { closeWindow(w); afterClose(pkg); return }
+        // Hidden behind the desktop: bring it forward, then press its ✕.
+        if (pkg in running) {
+            launchPackage(pkg)
+            main.postDelayed({ windows.firstOrNull { it.pkg == pkg }?.let { closeWindow(it); afterClose(pkg) } }, 900)
+        }
     }
+
+    /** Closes every open window, one after another (each one is a click on its ✕). */
+    fun closeAll() {
+        val pkgs = running.toList()
+        pkgs.forEachIndexed { i, pkg -> main.postDelayed({ close(pkg) }, i * 1100L) }
+    }
+
+    fun globalAction(action: Int) { service?.performGlobalAction(action) }
 
     /** Android's desktop-mode title bar ✕ (DecorCaptionView). */
     private const val CLOSE_BUTTON_ID = "android:id/close_window"
@@ -841,10 +857,11 @@ object DesktopMode {
     private fun stopShell() {
         endDrag(); endScroll()
         overlays?.remove(); overlays = null
-        menuOpen = false; query = ""; running = emptyList()
+        menuOpen = false; query = ""; running = emptyList(); panel = null
     }
 
     fun toggleMenu() {
+        panel = null
         menuOpen = !menuOpen
         if (!menuOpen) query = ""
     }
@@ -905,7 +922,7 @@ object DesktopMode {
         private fun layoutAll() {
             val (w, h) = size(ctx.display!!)
             val bar = taskbarPx()
-            val expanded = menuOpen || contextMenu != null
+            val expanded = menuOpen || contextMenu != null || panel != null
             shellParams.width = w
             shellParams.height = when { expanded -> h; taskbarHidden -> 2; else -> bar }
             shellParams.y = h - shellParams.height

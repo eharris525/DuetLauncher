@@ -20,6 +20,10 @@ enum class SurfaceStyle(val title: String, val summary: String) {
     SOLID("Solid", "Opaque dark panels"),
     OUTLINE("Outline", "Clear, with a thin outline"),
     MINIMAL("Minimal", "No panels — just text and icons on the wallpaper"),
+    TINTED("Tinted glass", "Frosted glass in your accent colour"),
+    GRADIENT("Gradient", "Panels that fade through your accent colour"),
+    NEON("Neon", "Dark panels with a glowing accent edge"),
+    AMOLED("Pure black", "Black panels, for OLED screens and dark wallpapers"),
 }
 
 /** Accent for highlights (the active letter, the action button's glyph). */
@@ -32,7 +36,38 @@ enum class AccentColor(val title: String, val color: Color) {
     YELLOW("Yellow", Color(0xFFFFE082)),
     GREEN("Green", Color(0xFF8BE0A4)),
     TEAL("Teal", Color(0xFF7FDDE0)),
+    INDIGO("Indigo", Color(0xFF9FA8FF)),
+    LAVENDER("Lavender", Color(0xFFDCC8FF)),
+    CORAL("Coral", Color(0xFFFF9E80)),
+    GOLD("Gold", Color(0xFFE6C068)),
+    LIME("Lime", Color(0xFFC6F68D)),
+    MINT("Mint", Color(0xFFA8F0D0)),
+    SKY("Sky", Color(0xFF81D4FA)),
     WHITE("White", Color(0xFFFFFFFF)),
+}
+
+/** A ready-made look: panel style, accent colour, font and wallpaper dimming in one tap. */
+enum class ThemePreset(
+    val title: String,
+    val summary: String,
+    val style: SurfaceStyle,
+    val accent: AccentColor,
+    val font: FontChoice = FontChoice.DEFAULT,
+    val dim: Int = 0,
+) {
+    DUET("Duet", "Liquid glass and blue, the original look", SurfaceStyle.LIQUID_GLASS, AccentColor.BLUE),
+    FROST("Frost", "Soft frosted glass with sky blue", SurfaceStyle.FROSTED, AccentColor.SKY, FontChoice.LIGHT),
+    MIDNIGHT("Midnight", "Solid dark panels with lavender", SurfaceStyle.SOLID, AccentColor.LAVENDER, dim = 25),
+    OLED("OLED", "Pure black panels on a dimmed wallpaper", SurfaceStyle.AMOLED, AccentColor.WHITE, dim = 45),
+    NEON("Neon", "Glowing teal edges on dark glass", SurfaceStyle.NEON, AccentColor.TEAL, FontChoice.MEDIUM, dim = 20),
+    SUNSET("Sunset", "Warm gradient panels", SurfaceStyle.GRADIENT, AccentColor.CORAL),
+    FOREST("Forest", "Green-tinted glass", SurfaceStyle.TINTED, AccentColor.MINT),
+    TERMINAL("Terminal", "Thin outlines, lime text accents, monospace", SurfaceStyle.OUTLINE, AccentColor.LIME, FontChoice.MONO, dim = 35),
+    PAPER("Paper", "Just text on the wallpaper, serif font", SurfaceStyle.MINIMAL, AccentColor.GOLD, FontChoice.SERIF, dim = 15);
+
+    fun isCurrent(p: Prefs) = p.surfaceStyle == style && p.accent == accent && p.font == font && p.wallpaperDim == dim
+
+    fun apply(p: Prefs) { p.surfaceStyle = style; p.accent = accent; p.font = font; p.wallpaperDim = dim }
 }
 
 val accent: Color get() = DuetApp.instance.prefs.accent.color
@@ -56,6 +91,24 @@ fun Modifier.glass(
         .clip(shape)
         .border(1.dp, Color.White.copy(alpha = 0.55f * strength), shape)
     SurfaceStyle.MINIMAL -> this.clip(shape)
+    SurfaceStyle.TINTED -> this
+        .clip(shape)
+        .background(accent.copy(alpha = 0.22f * strength))
+        .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.12f * strength), Color.Transparent)))
+        .border(1.dp, accent.copy(alpha = 0.45f * strength), shape)
+    SurfaceStyle.GRADIENT -> this
+        .clip(shape)
+        .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.50f * strength), Color(0xFF6A3FA0).copy(alpha = 0.35f * strength))))
+        .border(1.dp, Color.White.copy(alpha = 0.18f * strength), shape)
+    SurfaceStyle.NEON -> this
+        .clip(shape)
+        .background(Color(0xFF07090D).copy(alpha = 0.72f))
+        .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.16f * strength), Color.Transparent)))
+        .border(1.5.dp, accent.copy(alpha = 0.95f * strength), shape)
+    SurfaceStyle.AMOLED -> this
+        .clip(shape)
+        .background(Color.Black)
+        .border(1.dp, Color.White.copy(alpha = 0.07f), shape)
 }
 
 /**

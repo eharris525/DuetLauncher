@@ -64,6 +64,8 @@ class Prefs(context: Context) {
     var swipeApp by string("swipe_app", "")
     private var fontName by string("font", FontChoice.DEFAULT.name)
     private var surfaceStyleName by string("surface_style", SurfaceStyle.LIQUID_GLASS.name)
+    /** Darkens the wallpaper behind the home screen, 0–60 %. */
+    var wallpaperDim by int("wallpaper_dim", 0)
     private var accentName by string("accent", AccentColor.BLUE.name)
     /** Bumped whenever a new custom font file is imported, so it gets reloaded. */
     var customFontVersion by int("custom_font_version", 0)
@@ -79,6 +81,11 @@ class Prefs(context: Context) {
     var desktopMode by bool("desktop_mode", true)
     /** Touchpad pointer speed, 1–10. */
     var touchpadSpeed by int("touchpad_speed", 5)
+    /** The AI button on the clock, and the AI app it talks to ("" = the default assistant). */
+    var aiButton by bool("ai_button", true)
+    var aiApp by string("ai_app", "")
+    /** Swipe right on the home/widgets screen to open the Google feed. */
+    var googleFeed by bool("google_feed", true)
     private var dualLayoutName by string("dual_layout", DualLayout.HOME_AND_LIST.name)
     private var favoritesRaw by string("favorites", "")
     private var hiddenRaw by string("hidden", "")

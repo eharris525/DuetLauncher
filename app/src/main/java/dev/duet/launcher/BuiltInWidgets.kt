@@ -18,6 +18,11 @@ import android.provider.CalendarContract
 import android.provider.Settings
 import android.text.format.DateFormat
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
+import android.os.SystemClock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -417,6 +422,9 @@ private fun MusicWidget() {
             Column(Modifier.weight(1f)) {
                 Text(title ?: "Nothing playing", style = OnWallpaper, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (artist != null) Text(artist, style = OnWallpaper, fontSize = 13.sp, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val duration = meta?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+                val st = state
+                if (duration > 0 && st != null) Scrubber(st, duration, controls, tint)
             }
             if (controls != null) {
                 MediaButton(Glyph.PREV) { controls.skipToPrevious() }
@@ -425,6 +433,75 @@ private fun MusicWidget() {
             }
         }
     }
+}
+
+/**
+ * Song position: follows playback between updates, and drag or tap it to seek (when the
+ * player allows seeking).
+ */
+@Composable
+private fun Scrubber(st: PlaybackState, duration: Long, controls: MediaController.TransportControls?, tint: Color?) {
+    val playing = st.state == PlaybackState.STATE_PLAYING
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(playing, st) {
+        now = SystemClock.elapsedRealtime()
+        while (playing) { delay(250); now = SystemClock.elapsedRealtime() }
+    }
+    val live = if (playing && st.lastPositionUpdateTime > 0)
+        st.position + ((now - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else st.position
+    var dragFrac by remember { mutableStateOf<Float?>(null) }
+    // After a seek, show the new spot until the player reports it (it can take a moment).
+    var seekedTo by remember { mutableStateOf<Pair<Float, Long>?>(null) }
+    val fresh = seekedTo?.takeIf { SystemClock.elapsedRealtime() - it.second < 1500 }
+    val frac = dragFrac ?: fresh?.first ?: (live.toFloat() / duration).coerceIn(0f, 1f)
+    val canSeek = controls != null && st.actions and PlaybackState.ACTION_SEEK_TO != 0L
+    val fill = (tint?.let { lerp(it, Color.White, 0.55f) } ?: Color.White)
+    val scope = rememberCoroutineScope()
+
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(clockTime((frac * duration).toLong()), style = OnWallpaper, fontSize = 11.sp, color = Dim)
+        Box(
+            Modifier.weight(1f).height(22.dp).padding(horizontal = 8.dp)
+                .then(if (!canSeek) Modifier else Modifier.pointerInput(duration) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        dragFrac = (down.position.x / size.width).coerceIn(0f, 1f)
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            val c = e.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!c.pressed) break
+                            c.consume()
+                            dragFrac = (c.position.x / size.width).coerceIn(0f, 1f)
+                        }
+                        dragFrac?.let { f ->
+                            controls?.seekTo((f * duration).toLong())
+                            seekedTo = f to SystemClock.elapsedRealtime()
+                            scope.launch { delay(1600); seekedTo = null }
+                        }
+                        dragFrac = null
+                    }
+                }),
+            contentAlignment = Alignment.Center,
+        ) {
+            val grabbing = dragFrac != null
+            Canvas(Modifier.fillMaxWidth().height(22.dp)) {
+                val y = size.height / 2
+                val h = if (grabbing) 6.dp.toPx() else 4.dp.toPx()
+                val x = size.width * frac
+                drawRoundRect(Color.White.copy(alpha = 0.22f), Offset(0f, y - h / 2), Size(size.width, h), CornerRadius(h / 2))
+                drawRoundRect(fill, Offset(0f, y - h / 2), Size(x, h), CornerRadius(h / 2))
+                if (canSeek) drawCircle(Color.White, if (grabbing) 7.dp.toPx() else 5.dp.toPx(), Offset(x, y))
+            }
+        }
+        Text(clockTime(duration), style = OnWallpaper, fontSize = 11.sp, color = Dim)
+    }
+}
+
+private fun clockTime(ms: Long): String {
+    val t = (ms / 1000).coerceAtLeast(0)
+    val h = t / 3600; val m = t / 60 % 60; val sec = t % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
 private fun Modifier.matchParentSizeCompat() = this.fillMaxSize()

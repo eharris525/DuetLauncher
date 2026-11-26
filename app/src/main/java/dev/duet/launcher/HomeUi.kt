@@ -151,7 +151,7 @@ fun LauncherRoot(activity: MainActivity) {
     }
 
     CompositionLocalProvider(LocalClockAnchor provides clockAnchor) {
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = prefs.wallpaperDim / 100f))) {
       Box(Modifier.fillMaxSize().graphicsLayer { alpha = contentAlpha.value }) {
         when {
             mode == ScreenMode.Single -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) { single() }
@@ -418,6 +418,7 @@ private fun HomeColumn(
     clockAlpha: Float = 1f,
 ) {
     val prefs = DuetApp.instance.prefs
+    FeedSwipe(enabled = prefs.googleFeed && showHeader && !activity.ui.editWidgets) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxWidth()
@@ -450,7 +451,7 @@ private fun HomeColumn(
                 }
             }
         }
-    }
+    }    }
 }
 
 private sealed interface ListRow {

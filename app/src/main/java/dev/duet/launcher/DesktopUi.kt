@@ -71,15 +71,22 @@ fun DesktopShell(onLayoutChange: () -> Unit) {
     val open = DesktopMode.menuOpen
     val menu = DesktopMode.contextMenu
     val hidden = DesktopMode.taskbarHidden
-    LaunchedEffect(open, menu, hidden) { onLayoutChange() }
+    val panel = DesktopMode.panel
+    LaunchedEffect(open, menu, hidden, panel) { onLayoutChange() }
     Box(Modifier.fillMaxSize()) {
-        if (open || menu != null) {
+        if (open || menu != null || panel != null) {
             // Click outside a menu to close it.
-            Box(Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, null) {
-                DesktopMode.menuOpen = false; DesktopMode.contextMenu = null
-            })
+            Box(Modifier.fillMaxSize().background(if (open || panel == DesktopPanel.RECENTS) Color.Black.copy(alpha = 0.35f) else Color.Transparent)
+                .clickable(remember { MutableInteractionSource() }, null) {
+                    DesktopMode.menuOpen = false; DesktopMode.contextMenu = null; DesktopMode.panel = null
+                })
         }
-        if (open) StartMenu(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = taskbarDp() + 8.dp))
+        if (open) StartMenu(Modifier.align(Alignment.Center).padding(bottom = taskbarDp()))
+        when (panel) {
+            DesktopPanel.NOTIFICATIONS -> NotificationPanel(Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = taskbarDp() + 8.dp))
+            DesktopPanel.RECENTS -> RecentsPanel(Modifier.align(Alignment.Center).padding(bottom = taskbarDp()))
+            null -> {}
+        }
         if (!hidden) Taskbar(Modifier.align(Alignment.BottomCenter))
         menu?.let { RightClickMenu(it) }
     }
@@ -115,8 +122,10 @@ private fun RightClickMenu(m: ContextMenu) {
             .padding(vertical = 6.dp)
     ) {
         if (m.pkg == null) {
-            MenuItem("Start") { DesktopMode.contextMenu = null; DesktopMode.menuOpen = true }
+            MenuItem("Apps") { DesktopMode.contextMenu = null; DesktopMode.menuOpen = true }
             MenuItem("Show desktop") { DesktopMode.contextMenu = null; DesktopMode.showDesktop() }
+            MenuItem("Recent apps") { DesktopMode.contextMenu = null; togglePanel(DesktopPanel.RECENTS) }
+            MenuItem("Notifications") { DesktopMode.contextMenu = null; togglePanel(DesktopPanel.NOTIFICATIONS) }
             MenuItem("Open touchpad on phone") { DesktopMode.contextMenu = null; DesktopMode.openTouchpad() }
             MenuItem("Duet settings") { DesktopMode.contextMenu = null; openSettingsOnDesktop() }
             return@Column
@@ -299,6 +308,10 @@ fun ResizeGrip() {
     }
 }
 
+/**
+ * Laid out like Samsung DeX: the app drawer and navigation on the left, pinned and open apps in
+ * the middle, and the tray (keyboard, battery, notifications, clock) on the right.
+ */
 @Composable
 private fun Taskbar(modifier: Modifier) {
     val prefs = DuetApp.instance.prefs
@@ -308,33 +321,46 @@ private fun Taskbar(modifier: Modifier) {
     val running = DesktopMode.running
     val others = running.filterNot { pkg -> pinned.any { it.component.packageName == pkg } }
         .mapNotNull { pkg -> apps.firstOrNull { it.component.packageName == pkg } }
+    val tint = Color.White.copy(alpha = 0.85f)
+    val panel = DesktopMode.panel
+    val notifications = GlanceMirrorService.shown.size
 
-    Row(
-        modifier.fillMaxWidth().height(taskbarDp()).background(BarColor).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        BarButton(selected = DesktopMode.menuOpen, onClick = { DesktopMode.toggleMenu() }) {
-            Text("⊞", fontSize = 24.sp, color = MaterialTheme.colorScheme.primary)
+    Box(modifier.fillMaxWidth().height(taskbarDp()).background(BarColor).padding(horizontal = 8.dp)) {
+        Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            BarButton(selected = DesktopMode.menuOpen, onClick = { DesktopMode.toggleMenu() }) { BarIcon(BarGlyph.APPS, MaterialTheme.colorScheme.primary) }
+            BarButton(selected = panel == DesktopPanel.RECENTS, onClick = { togglePanel(DesktopPanel.RECENTS) }) { BarIcon(BarGlyph.RECENTS, tint) }
+            BarButton(onClick = { DesktopMode.panel = null; DesktopMode.showDesktop() }) { BarIcon(BarGlyph.HOME, tint) }
+            BarButton(onClick = { DesktopMode.panel = null; DesktopMode.back() }) { BarIcon(BarGlyph.BACK, tint) }
         }
-        pinned.forEach { a ->
-            BarButton(
-                running = a.component.packageName in running, active = DesktopMode.activeWindow?.pkg == a.component.packageName,
-                onClick = { DesktopMode.launch(a) }, onRightClick = { showContextMenu(a.component.packageName) },
-            ) { AppIcon(a, 30) }
+        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            pinned.forEach { a ->
+                BarButton(
+                    running = a.component.packageName in running, active = DesktopMode.activeWindow?.pkg == a.component.packageName,
+                    onClick = { DesktopMode.launch(a) }, onRightClick = { showContextMenu(a.component.packageName) },
+                ) { AppIcon(a, 30) }
+            }
+            if (others.isNotEmpty() && pinned.isNotEmpty()) {
+                Box(Modifier.width(1.dp).height(24.dp).background(Color.White.copy(alpha = 0.2f)))
+            }
+            others.forEach { a ->
+                BarButton(
+                    running = true, active = DesktopMode.activeWindow?.pkg == a.component.packageName,
+                    onClick = { DesktopMode.launch(a) }, onRightClick = { showContextMenu(a.component.packageName) },
+                ) { AppIcon(a, 30) }
+            }
         }
-        if (others.isNotEmpty() && pinned.isNotEmpty()) {
-            Box(Modifier.width(1.dp).height(24.dp).background(Color.White.copy(alpha = 0.2f)))
+        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+            BarButton(onClick = { DesktopMode.openTouchpad() }) { BarIcon(BarGlyph.KEYBOARD, tint) }
+            BatteryTray()
+            BarButton(selected = panel == DesktopPanel.NOTIFICATIONS, onClick = { togglePanel(DesktopPanel.NOTIFICATIONS) }) {
+                BarIcon(BarGlyph.BELL, tint)
+                if (notifications > 0) Box(
+                    Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(16.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (notifications > 9) "9+" else "$notifications", fontSize = 9.sp, color = Color.Black) }
+            }
+            TrayClock { togglePanel(DesktopPanel.NOTIFICATIONS) }
         }
-        others.forEach { a ->
-            BarButton(
-                running = true, active = DesktopMode.activeWindow?.pkg == a.component.packageName,
-                onClick = { DesktopMode.launch(a) }, onRightClick = { showContextMenu(a.component.packageName) },
-            ) { AppIcon(a, 30) }
-        }
-        Spacer(Modifier.weight(1f))
-        BarButton(onClick = { DesktopMode.showDesktop() }) { Text("▭", fontSize = 20.sp, color = Color.White.copy(alpha = 0.8f)) }
-        BarClock()
     }
 }
 
@@ -342,7 +368,7 @@ private fun Taskbar(modifier: Modifier) {
 @Composable
 private fun BarButton(
     selected: Boolean = false, running: Boolean = false, active: Boolean = false,
-    onClick: () -> Unit, onRightClick: (() -> Unit)? = null, content: @Composable () -> Unit,
+    onClick: () -> Unit, onRightClick: (() -> Unit)? = null, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
     Box(
         Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
@@ -359,20 +385,11 @@ private fun BarButton(
 }
 
 @Composable
-private fun BarClock() {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000L - now % 1000L) } }
-    Column(Modifier.padding(horizontal = 10.dp), horizontalAlignment = Alignment.End) {
-        Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(now)), fontSize = 14.sp, color = Color.White)
-        Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(now)), fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
-    }
-}
-
-@Composable
 private fun StartMenu(modifier: Modifier) {
     val results = DesktopMode.searchResults()
     Column(
-        modifier.width(520.dp).height(560.dp).clip(RoundedCornerShape(16.dp)).background(MenuColor)
+        modifier.width(860.dp).height(600.dp).clip(RoundedCornerShape(20.dp)).background(MenuColor)
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
             .clickable(remember { MutableInteractionSource() }, null) { } // don't close when clicking inside
             .padding(16.dp)
     ) {
@@ -387,7 +404,7 @@ private fun StartMenu(modifier: Modifier) {
             )
         }
         Spacer(Modifier.height(12.dp))
-        LazyVerticalGrid(GridCells.Fixed(5), Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyVerticalGrid(GridCells.Fixed(8), Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp)) {
             items(results, key = { it.key }) { a -> GridApp(a, onRightClick = { showContextMenu(a.component.packageName) }) { DesktopMode.launch(a) } }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
