@@ -27,10 +27,18 @@ A minimal, list-based Android home screen built for the Surface Duo 2's two scre
   other edge too. The apps for the letter under your finger sit in the middle of the screen.
 - **Tapping apps:** opens on the left screen when both are free, or next to the app that's
   already open.
-- **Styles:** Liquid glass, Frosted, Solid, Outline or Minimal, plus an accent colour
-  (Settings → Style).
+- **Themes:** one-tap presets (Duet, Posterboard, Frost, Midnight, OLED, Neon, Sunset, Forest,
+  Terminal, Paper) that set the panel style, accent colour, font, wallpaper dimming and icons
+  together. Each has a matching built-in wallpaper, drawn on the phone to fit both screens, and
+  a generated icon style that reworks every app's icon (or your icon pack's) in the theme's
+  look while keeping each app's own colour.
 - **Fonts:** pick a built-in Android font or load your own .ttf / .otf (Settings → Font).
-- Long-press an app to favorite, reorder, hide, open App info, or uninstall. Search sits at the top of the list.
+- **App menu:** long-press an app for its shortcuts (e.g. "New chat"), which screen to open it
+  on, and buttons to favorite, reorder, hide, open App info or uninstall. Search sits at the top of the list.
+- **AI button:** the sparkle on the clock starts a voice chat with the AI app you choose, or with
+  Claude right on the home screen (bring your own API key from console.anthropic.com).
+- **Music widget:** shows what's playing, with controls and a seek bar.
+- **Google feed:** swipe right on the home screen to open Google's Discover feed.
 - **Desktop mode (experimental):** plug a monitor, TV or display glasses into the USB-C port and Duet puts a
   desktop on it: a taskbar (Start menu with search, pinned and open apps, clock), your
   favorites as desktop shortcuts, and apps in windows. The Duo becomes the touchpad (see below).
