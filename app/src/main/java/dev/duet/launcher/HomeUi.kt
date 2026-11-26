@@ -16,6 +16,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlin.math.abs
 import kotlin.math.exp
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.lerp
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.TransformOrigin
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -213,6 +227,12 @@ private fun AppsPane(
 
     val railLeft = !prefs.railOnRight
     val navGap = sideNavigationGap()
+    // Where the finger is on the bar (0..1, null when not touching), and its y on screen for the bubble.
+    var touchFraction by remember { mutableStateOf<Float?>(null) }
+    var touchRootY by remember { mutableFloatStateOf(0f) }
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(activeLetter) { if (activeLetter != null) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+    val letterCounts = remember(visible) { visible.groupingBy { it.letter }.eachCount() }
     // hidden = the invisible strip on the other edge: same touch area, the visible bar shows the letter.
     val rail: @Composable (hidden: Boolean) -> Unit = { hidden ->
         val onLeft = if (hidden) !railLeft else railLeft
@@ -222,6 +242,7 @@ private fun AppsPane(
             hidden = hidden,
             available = available,
             active = activeLetter.takeUnless { hidden },
+            touch = touchFraction.takeUnless { hidden },
             onPress = {
                 val wasOpen = listOpen
                 ui.listOpen = true
@@ -230,12 +251,15 @@ private fun AppsPane(
                 follower.geometry = railGeometry
                 follower.start(scope, snapFirst = !wasOpen)
             },
-            onDrag = { fraction ->
+            onDrag = { fraction, rootY ->
                 activeLetter = LETTERS[letterSlot(fraction)]
+                touchFraction = fraction
+                touchRootY = rootY
                 follower.fraction = fraction
             },
             onRelease = {
                 activeLetter = null
+                touchFraction = null
                 follower.dragging = false
             },
         )
@@ -245,7 +269,8 @@ private fun AppsPane(
 
     Row(Modifier.fillMaxSize()) {
         if (railLeft) rail(false)
-        Box(Modifier.weight(1f).fillMaxHeight()) {
+        var paneTop by remember { mutableFloatStateOf(0f) }
+        Box(Modifier.weight(1f).fillMaxHeight().onGloballyPositioned { paneTop = it.positionInRoot().y }) {
             // Home stays composed (just invisible) so hosted widgets aren't torn down each time the list opens.
             if (!alwaysList) {
                 Box(Modifier.fillMaxSize().graphicsLayer { alpha = homeAlpha }) {
@@ -270,17 +295,31 @@ private fun AppsPane(
                     searchRequest = ui.searchRequest,
                 )
             }
+            // The letter rides beside the finger, pointing at the bar.
+            val bubbleY = remember { Animatable(0f) }
+            var bubbleShown by remember { mutableStateOf(false) }
+            LaunchedEffect(touchRootY, activeLetter != null) {
+                if (activeLetter == null) return@LaunchedEffect
+                if (!bubbleShown) { bubbleY.snapTo(touchRootY); bubbleShown = true }
+                else bubbleY.animateTo(touchRootY, spring(dampingRatio = 0.85f, stiffness = 1100f))
+            }
+            LaunchedEffect(activeLetter == null) { if (activeLetter == null) { delay(220); if (activeLetter == null) bubbleShown = false } }
+            val bubbleSize = 76.dp
             androidx.compose.animation.AnimatedVisibility(
                 visible = activeLetter != null,
-                // Beside the bar rather than in the middle, where the letter's apps now land.
-                modifier = Modifier.align(if (railLeft) Alignment.CenterStart else Alignment.CenterEnd).padding(horizontal = 20.dp),
-                enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.7f),
-                exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.85f),
+                modifier = Modifier.align(if (railLeft) Alignment.TopStart else Alignment.TopEnd)
+                    .offset { IntOffset(0, (bubbleY.value - paneTop - bubbleSize.toPx() / 2).roundToInt().coerceAtLeast(0)) }
+                    // Clear of the letters leaning out from the bar.
+                    .padding(horizontal = 44.dp),
+                enter = fadeIn(tween(110)) + scaleIn(spring(dampingRatio = 0.6f, stiffness = 700f), initialScale = 0.5f,
+                    transformOrigin = TransformOrigin(if (railLeft) 0f else 1f, 0.5f)),
+                exit = fadeOut(tween(180)) + scaleOut(tween(200), targetScale = 0.6f,
+                    transformOrigin = TransformOrigin(if (railLeft) 0f else 1f, 0.5f)),
             ) {
                 // Keep showing the last letter while fading out.
                 var shown by remember { mutableStateOf('A') }
                 activeLetter?.let { shown = it }
-                LetterBubble(shown, Modifier)
+                LetterBubble(shown, letterCounts[shown] ?: 0, pointRight = !railLeft, size = bubbleSize)
             }
             if (prefs.railBothSides) {
                 Box(Modifier.align(if (railLeft) Alignment.CenterEnd else Alignment.CenterStart).fillMaxHeight()) { rail(true) }
@@ -628,8 +667,9 @@ private fun AlphabetRail(
     hidden: Boolean,
     available: Set<Char>,
     active: Char?,
+    touch: Float?,
     onPress: () -> Unit,
-    onDrag: (fraction: Float) -> Unit,
+    onDrag: (fraction: Float, rootY: Float) -> Unit,
     onRelease: () -> Unit,
 ) {
     val compact = DuetApp.instance.prefs.compactRail
@@ -645,23 +685,36 @@ private fun AlphabetRail(
     Box(
         Modifier.height(railHeight).width(if (compact) 26.dp else 28.dp),
     ) {
-    // Glass behind the letters (separate so the active letter can pop out sideways unclipped).
-    Box(Modifier.matchParentSize().glass(RoundedCornerShape(14.dp), strength = 0.8f))
+    // Fades the magnifying wave in and out; the wave itself follows the finger exactly.
+    val press by animateFloatAsState(if (touch != null) 1f else 0f, tween(if (touch != null) 140 else 260), label = "railPress")
+    var lastTouch by remember { mutableFloatStateOf(0.5f) }
+    touch?.let { lastTouch = it }
+    val tint = accent
+    // Glass behind the letters (separate so the letters can lean out sideways unclipped).
+    Box(
+        Modifier.matchParentSize()
+            .graphicsLayer { val s = 1f + 0.12f * press; scaleX = s }
+            .glass(RoundedCornerShape(14.dp), strength = 0.8f + 0.2f * press)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, tint.copy(alpha = 0.22f * press), Color.Transparent)))
+    )
+    var colTop by remember { mutableFloatStateOf(0f) }
     Column(
         Modifier.matchParentSize().padding(vertical = 8.dp)
+            .onGloballyPositioned { colTop = it.positionInRoot().y }
             .pointerInput(Unit) {
                 fun fraction(y: Float) = (y / size.height).coerceIn(0f, 1f)
+                fun report(y: Float) = onDrag(fraction(y), colTop + y.coerceIn(0f, size.height.toFloat()))
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     down.consume()
-                    onDrag(fraction(down.position.y))
+                    report(down.position.y)
                     onPress()
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
                         change.consume()
-                        onDrag(fraction(change.position.y))
+                        report(change.position.y)
                     }
                     onRelease()
                 }
@@ -669,25 +722,29 @@ private fun AlphabetRail(
         verticalArrangement = Arrangement.SpaceEvenly,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val n = LETTERS.length
         LETTERS.forEachIndexed { i, c ->
-            val highlight by animateFloatAsState(if (c == active) 1f else 0f, tween(120), label = "rail")
-            val label = roomy || i % 2 == 0 || c == active
+            // Dock-style magnification: letters near the finger swell and lean out in a smooth wave.
+            val d = lastTouch * n - (i + 0.5f)
+            val wave = press * exp(-(d * d) / (2f * RAIL_WAVE_SIGMA * RAIL_WAVE_SIGMA))
+            val label = roomy || i % 2 == 0 || c == active || wave > 0.3f
+            val isActive = c == active
             Text(
                 if (label) c.toString() else "•",
                 style = OnWallpaper,
                 fontSize = if (!roomy) 9.5.sp else if (compact) 10.5.sp else 11.sp,
                 lineHeight = if (!roomy) 10.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
-                fontWeight = if (c == active) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isActive) FontWeight.Bold else if (wave > 0.5f) FontWeight.Medium else FontWeight.Normal,
                 modifier = Modifier.graphicsLayer {
-                    val scale = 1f + 0.5f * highlight
+                    val scale = 1f + 0.75f * wave
                     scaleX = scale; scaleY = scale
-                    // Pop out towards the middle of the screen.
-                    translationX = (if (onLeft) 22.dp else (-22).dp).toPx() * highlight
+                    // Lean out towards the middle of the screen.
+                    translationX = (if (onLeft) 26.dp else (-26).dp).toPx() * wave
                 },
                 color = when {
-                    c == active -> accent
-                    c in available -> Color.White.copy(alpha = 0.85f)
-                    else -> Color.White.copy(alpha = 0.25f)
+                    isActive -> tint
+                    c in available -> lerp(Color.White.copy(alpha = 0.8f), Color.White, wave)
+                    else -> Color.White.copy(alpha = 0.25f + 0.2f * wave)
                 },
             )
         }
@@ -724,12 +781,30 @@ private fun sideNavigationGap(): Pair<Dp, Dp> {
 /** Height one rail letter needs to be readable and touchable on its own. */
 private const val RAIL_LETTER_DP = 14
 
+/** How many letters either side of the finger the magnifying wave reaches (its spread). */
+private const val RAIL_WAVE_SIGMA = 1.6f
+
+/**
+ * A teardrop in the accent colour with its point towards the alphabet bar: the letter under
+ * the finger, and how many apps start with it.
+ */
 @Composable
-private fun LetterBubble(letter: Char, modifier: Modifier) {
-    Box(
-        modifier.size(88.dp).clip(CircleShape).background(Color(0x991B1C20)).glass(CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(letter.toString(), color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Medium)
+private fun LetterBubble(letter: Char, count: Int, pointRight: Boolean, size: Dp) {
+    val tint = accent
+    // A square with one sharp corner, turned 45° so that corner points sideways at the bar.
+    val shape = RoundedCornerShape(topStartPercent = 50, topEndPercent = 50, bottomEndPercent = if (pointRight) 8 else 50, bottomStartPercent = if (pointRight) 50 else 8)
+    Box(Modifier.size(size + 12.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(size)
+                .graphicsLayer { rotationZ = if (pointRight) -45f else 45f }
+                .shadow(14.dp, shape, ambientColor = tint, spotColor = tint)
+                .clip(shape)
+                .background(Brush.linearGradient(listOf(lerp(tint, Color.White, 0.35f), tint, lerp(tint, Color.Black, 0.25f))))
+                .border(1.dp, Color.White.copy(alpha = 0.45f), shape)
+        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(letter.toString(), color = Color(0xFF101216), fontSize = 38.sp, fontWeight = FontWeight.SemiBold, lineHeight = 40.sp)
+            if (count > 0) Text(if (count == 1) "1 app" else "$count apps", color = Color(0xFF101216).copy(alpha = 0.7f), fontSize = 10.sp, lineHeight = 11.sp)
+        }
     }
 }
