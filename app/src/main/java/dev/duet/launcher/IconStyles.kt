@@ -21,73 +21,82 @@ import androidx.core.graphics.drawable.toBitmap
  */
 enum class IconStyle(val title: String, val summary: String) {
     ORIGINAL("Original", "The apps' own icons"),
-    POSTER("Posterboard", "Ink-printed symbols on cream cards with a hard shadow"),
-    FROST("Frost", "White symbols on frosted glass circles"),
-    MIDNIGHT("Midnight", "Lavender symbols on deep night circles"),
-    OLED("OLED", "White symbols on pure black"),
-    NEON("Neon", "Glowing teal symbols in a neon ring"),
-    SUNSET("Sunset", "White symbols on warm gradient tiles"),
-    FOREST("Forest", "Mint symbols on deep green"),
-    TERMINAL("Terminal", "Green phosphor symbols in a terminal box"),
+    POSTER("Posterboard", "Symbols printed in each app's colour on cream cards"),
+    FROST("Frost", "White symbols on glass tinted with each app's colour"),
+    MIDNIGHT("Midnight", "Pale symbols on night circles with a hint of the app's colour"),
+    OLED("OLED", "Symbols in each app's colour on pure black"),
+    NEON("Neon", "A neon ring and glow in each app's colour"),
+    SUNSET("Sunset", "White symbols on warm gradients from each app's colour"),
+    FOREST("Forest", "Leafy tints of each app's colour on deep green"),
+    TERMINAL("Terminal", "Phosphor glow in each app's colour, with scanlines"),
     PAPER("Paper", "The original icons in faded sepia");
 
-    /** Draws [d] at [size] px in this style. */
+    /** Draws [d] at [size] px in this style, keeping the app's own main colour in it. */
     fun render(d: Drawable, size: Int): Bitmap {
         if (this == ORIGINAL) return d.toBitmap(size, size)
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         val s = size.toFloat()
+        // The app's colour, eased into the style's range so every icon still fits the theme.
+        val app = mainColor(d)
         when (this) {
             POSTER -> {
+                // Cream card, symbol printed in the app's colour as a darker ink.
                 val r = RectF(s * 0.06f, s * 0.06f, s * 0.88f, s * 0.88f)
                 val rad = s * 0.18f
                 c.drawRoundRect(RectF(r).apply { offset(s * 0.06f, s * 0.06f) }, rad, rad, fill(Color.argb(170, 0, 0, 0)))
-                c.drawRoundRect(r, rad, rad, fill(0xFFDDD7C2.toInt()))
+                c.drawRoundRect(r, rad, rad, fill(mix(0xFFDDD7C2.toInt(), app, 0.12f)))
                 c.drawRoundRect(r, rad, rad, stroke(0xFF4A4438.toInt(), s * 0.04f))
-                glyph(c, d, r, duotone(0xFF1B1811.toInt(), 0xFF8C3A30.toInt()), inset = 0.2f)
+                glyph(c, d, r, duotone(mix(app, 0xFF1B1811.toInt(), 0.7f), mix(app, 0xFF1B1811.toInt(), 0.15f)), inset = 0.2f)
             }
             FROST -> {
-                circle(c, s, fill(Color.argb(70, 255, 255, 255)))
-                c.drawCircle(s / 2, s / 2, s * 0.46f, stroke(Color.argb(150, 255, 255, 255), s * 0.025f))
+                // Glass tinted by the app's colour, white symbol.
+                circle(c, s, fill(withAlpha(mix(app, Color.WHITE, 0.45f), 120)))
+                c.drawCircle(s / 2, s / 2, s * 0.46f, stroke(Color.argb(170, 255, 255, 255), s * 0.025f))
                 glyph(c, d, RectF(0f, 0f, s, s), solid(Color.WHITE))
             }
             MIDNIGHT -> {
-                circle(c, s, fill(0xFF1C1633.toInt()))
-                c.drawCircle(s / 2, s / 2, s * 0.46f, stroke(0xFF3A2F63.toInt(), s * 0.02f))
-                glyph(c, d, RectF(0f, 0f, s, s), duotone(0xFF8E7CC3.toInt(), 0xFFE6DCFF.toInt()))
+                // Night-blue disc with a hint of the app's colour; symbol in a pale version of it.
+                circle(c, s, fill(mix(0xFF1C1633.toInt(), app, 0.22f)))
+                c.drawCircle(s / 2, s / 2, s * 0.46f, stroke(mix(0xFF3A2F63.toInt(), app, 0.35f), s * 0.02f))
+                glyph(c, d, RectF(0f, 0f, s, s), duotone(mix(app, 0xFF8E7CC3.toInt(), 0.45f), mix(app, Color.WHITE, 0.7f)))
             }
             OLED -> {
+                // Black, with the symbol in the app's own colour (brightened) and a faint ring of it.
                 circle(c, s, fill(Color.BLACK))
-                c.drawCircle(s / 2, s / 2, s * 0.465f, stroke(Color.argb(60, 255, 255, 255), s * 0.015f))
-                glyph(c, d, RectF(0f, 0f, s, s), solid(Color.WHITE))
+                c.drawCircle(s / 2, s / 2, s * 0.465f, stroke(withAlpha(app, 90), s * 0.015f))
+                glyph(c, d, RectF(0f, 0f, s, s), solid(vivid(app, 0.75f)))
             }
             NEON -> {
+                // A neon ring and glow in the app's colour.
+                val glowColor = vivid(app, 0.6f)
                 circle(c, s, fill(0xFF07090D.toInt()))
-                val teal = 0xFF2DF5E0.toInt()
-                c.drawCircle(s / 2, s / 2, s * 0.44f, stroke(Color.argb(140, 45, 245, 224), s * 0.07f).apply {
+                c.drawCircle(s / 2, s / 2, s * 0.44f, stroke(withAlpha(glowColor, 140), s * 0.07f).apply {
                     maskFilter = BlurMaskFilter(s * 0.05f, BlurMaskFilter.Blur.NORMAL)
                 })
-                c.drawCircle(s / 2, s / 2, s * 0.44f, stroke(teal, s * 0.025f))
-                val box = RectF(0f, 0f, s, s)
-                glyph(c, d, box, solid(0xFFB9FFF6.toInt()), glow = Color.argb(200, 45, 245, 224))
+                c.drawCircle(s / 2, s / 2, s * 0.44f, stroke(glowColor, s * 0.025f))
+                glyph(c, d, RectF(0f, 0f, s, s), solid(mix(glowColor, Color.WHITE, 0.6f)), glow = withAlpha(glowColor, 200))
             }
             SUNSET -> {
+                // A warm gradient that starts from the app's colour.
                 val r = RectF(s * 0.04f, s * 0.04f, s * 0.96f, s * 0.96f)
                 c.drawRoundRect(r, s * 0.28f, s * 0.28f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    shader = LinearGradient(0f, 0f, s, s, 0xFFFF9E80.toInt(), 0xFF7A2E6A.toInt(), Shader.TileMode.CLAMP)
+                    shader = LinearGradient(0f, 0f, s, s, mix(app, 0xFFFF9E80.toInt(), 0.45f), mix(app, 0xFF7A2E6A.toInt(), 0.7f), Shader.TileMode.CLAMP)
                 })
                 glyph(c, d, r, solid(Color.WHITE))
             }
             FOREST -> {
-                circle(c, s, fill(0xFF173A2E.toInt()))
-                glyph(c, d, RectF(0f, 0f, s, s), duotone(0xFF6CCB9A.toInt(), 0xFFD6F7E4.toInt()))
+                // Deep green, nudged towards the app's colour; symbol in a light leafy tint of it.
+                circle(c, s, fill(mix(0xFF173A2E.toInt(), app, 0.25f)))
+                glyph(c, d, RectF(0f, 0f, s, s), duotone(mix(app, 0xFF6CCB9A.toInt(), 0.55f), mix(app, 0xFFD6F7E4.toInt(), 0.75f)))
             }
             TERMINAL -> {
+                // Phosphor in the app's colour: green apps glow green, red ones amber-red, and so on.
+                val phosphor = vivid(app, 0.7f)
                 val r = RectF(s * 0.06f, s * 0.06f, s * 0.94f, s * 0.94f)
                 c.drawRoundRect(r, s * 0.1f, s * 0.1f, fill(0xFF020A04.toInt()))
-                c.drawRoundRect(r, s * 0.1f, s * 0.1f, stroke(0xFF3BFF6A.toInt(), s * 0.03f))
-                glyph(c, d, r, solid(0xFF7DFF98.toInt()), glow = Color.argb(150, 59, 255, 106))
-                // Scanlines.
+                c.drawRoundRect(r, s * 0.1f, s * 0.1f, stroke(phosphor, s * 0.03f))
+                glyph(c, d, r, solid(mix(phosphor, Color.WHITE, 0.3f)), glow = withAlpha(phosphor, 150))
                 val scan = fill(Color.argb(70, 0, 0, 0))
                 var y = r.top; while (y < r.bottom) { c.drawRect(r.left, y, r.right, y + s * 0.012f, scan); y += s * 0.04f }
             }
@@ -100,6 +109,53 @@ enum class IconStyle(val title: String, val summary: String) {
     }
 
     private companion object {
+        /**
+         * The icon's main colour: its most common strongly coloured hue (so a white logo on a red
+         * tile gives red), or its average colour when it's mostly grey.
+         */
+        fun mainColor(d: Drawable): Int {
+            val n = 24
+            val b = d.toBitmap(n, n)
+            val buckets = FloatArray(12); val sums = Array(12) { FloatArray(3) }
+            var gr = 0f; var gg = 0f; var gb = 0f; var gn = 0f
+            val hsv = FloatArray(3)
+            for (y in 0 until n) for (x in 0 until n) {
+                val p = b.getPixel(x, y)
+                if (Color.alpha(p) < 200) continue
+                gr += Color.red(p); gg += Color.green(p); gb += Color.blue(p); gn++
+                Color.colorToHSV(p, hsv)
+                val weight = hsv[1] * hsv[2]
+                if (hsv[1] < 0.25f || hsv[2] < 0.2f) continue
+                val i = ((hsv[0] / 30f).toInt()).coerceIn(0, 11)
+                buckets[i] += weight
+                sums[i][0] += Color.red(p) * weight; sums[i][1] += Color.green(p) * weight; sums[i][2] += Color.blue(p) * weight
+            }
+            val best = buckets.indices.maxBy { buckets[it] }
+            if (buckets[best] > 2f) {
+                val w = buckets[best]
+                return Color.rgb((sums[best][0] / w).toInt(), (sums[best][1] / w).toInt(), (sums[best][2] / w).toInt())
+            }
+            return if (gn > 0) Color.rgb((gr / gn).toInt(), (gg / gn).toInt(), (gb / gn).toInt()) else Color.GRAY
+        }
+
+        /** [a] blended towards [b] by [t]. */
+        fun mix(a: Int, b: Int, t: Float): Int = Color.argb(
+            (Color.alpha(a) + (Color.alpha(b) - Color.alpha(a)) * t).toInt(),
+            (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+            (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+            (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt(),
+        )
+
+        fun withAlpha(c: Int, a: Int) = Color.argb(a, Color.red(c), Color.green(c), Color.blue(c))
+
+        /** [c] at full brightness and at least [minSat] saturation, for glowing styles (grey stays a soft white). */
+        fun vivid(c: Int, minSat: Float): Int {
+            val hsv = FloatArray(3); Color.colorToHSV(c, hsv)
+            if (hsv[1] < 0.12f) return 0xFFE8EEF2.toInt()
+            hsv[1] = maxOf(hsv[1], minSat); hsv[2] = 1f
+            return Color.HSVToColor(hsv)
+        }
+
         fun fill(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
         fun stroke(color: Int, w: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color; style = Paint.Style.STROKE; strokeWidth = w }
         fun circle(c: Canvas, s: Float, p: Paint) = c.drawCircle(s / 2, s / 2, s * 0.47f, p)
