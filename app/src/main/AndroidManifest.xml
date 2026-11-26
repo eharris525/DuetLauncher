@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
         <intent>
@@ -24,6 +25,9 @@
         <!-- AI apps for the clock's AI button -->
         <intent><action android:name="android.intent.action.ASSIST" /></intent>
         <intent><action android:name="android.intent.action.VOICE_COMMAND" /></intent>
+        <!-- Speech recognition and text-to-speech for the voice chat -->
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <!-- Icon pack discovery (ADW / Nova / GO / Apex conventions) -->
         <intent><action android:name="org.adw.launcher.THEMES" /></intent>
         <intent><action android:name="com.novalauncher.THEME" /></intent>

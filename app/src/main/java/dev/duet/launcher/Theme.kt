@@ -32,6 +32,7 @@ enum class FontChoice(val title: String, private val systemName: String?) {
     LIGHT("Light", "sans-serif-light"),
     THIN("Thin", "sans-serif-thin"),
     MEDIUM("Medium", "sans-serif-medium"),
+    HEAVY("Heavy", "sans-serif-black"),
     CONDENSED("Condensed", "sans-serif-condensed"),
     SERIF("Serif", "serif"),
     MONO("Monospace", "monospace"),

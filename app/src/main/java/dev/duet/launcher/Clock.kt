@@ -220,7 +220,7 @@ private fun ClockPill(activity: MainActivity) {
             }
             if (DuetApp.instance.prefs.aiButton) {
                 Spacer(Modifier.width(18.dp))
-                AiButton(onLongClick = { activity.openSettings() })
+                AiButton(activity)
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -239,13 +239,17 @@ private fun ClockPill(activity: MainActivity) {
 /** Starts a voice chat with the chosen AI app. Long-press opens Settings to pick another. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AiButton(onLongClick: () -> Unit) {
+private fun AiButton(activity: MainActivity) {
     val ctx = LocalContext.current
     Box(
         Modifier.size(46.dp).clip(CircleShape).glass(CircleShape, strength = 0.8f)
             .combinedClickable(
-                onClick = { Assistant.startVoice(ctx, DuetApp.instance.prefs.aiApp, ScreenCoverage.tapTarget()) },
-                onLongClick = onLongClick,
+                onClick = {
+                    val app = DuetApp.instance.prefs.aiApp
+                    if (app == Assistant.IN_DUET) activity.startVoiceChat()
+                    else Assistant.startVoice(ctx, app, ScreenCoverage.tapTarget())
+                },
+                onLongClick = { activity.openSettings() },
             ),
         contentAlignment = Alignment.Center,
     ) {

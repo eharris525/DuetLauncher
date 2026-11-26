@@ -21,6 +21,9 @@ import android.os.Process
 object Assistant {
     data class Choice(val pkg: String, val label: String)
 
+    /** [Prefs.aiApp] value for the voice chat with Claude built into Duet. */
+    const val IN_DUET = "duet:claude"
+
     /** Well-known AI apps, shown first in the picker when installed. */
     private val known = listOf(
         "com.openai.chatgpt" to "ChatGPT",
@@ -53,6 +56,7 @@ object Assistant {
 
     fun labelOf(ctx: Context, pkg: String): String =
         if (pkg.isEmpty()) "Default assistant"
+        else if (pkg == IN_DUET) "Claude, right on the home screen"
         else known.firstOrNull { it.first == pkg }?.second
             ?: runCatching { ctx.packageManager.let { it.getApplicationLabel(it.getApplicationInfo(pkg, 0)).toString() } }.getOrDefault(pkg)
 

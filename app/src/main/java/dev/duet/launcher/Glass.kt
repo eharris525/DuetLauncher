@@ -5,6 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -24,6 +27,7 @@ enum class SurfaceStyle(val title: String, val summary: String) {
     GRADIENT("Gradient", "Panels that fade through your accent colour"),
     NEON("Neon", "Dark panels with a glowing accent edge"),
     AMOLED("Pure black", "Black panels, for OLED screens and dark wallpapers"),
+    RETRO("Retro card", "Warm dark cards with a thick outline and a hard drop shadow"),
 }
 
 /** Accent for highlights (the active letter, the action button's glyph). */
@@ -36,6 +40,7 @@ enum class AccentColor(val title: String, val color: Color) {
     YELLOW("Yellow", Color(0xFFFFE082)),
     GREEN("Green", Color(0xFF8BE0A4)),
     TEAL("Teal", Color(0xFF7FDDE0)),
+    CRIMSON("Crimson", Color(0xFFD35C4D)),
     INDIGO("Indigo", Color(0xFF9FA8FF)),
     LAVENDER("Lavender", Color(0xFFDCC8FF)),
     CORAL("Coral", Color(0xFFFF9E80)),
@@ -56,6 +61,7 @@ enum class ThemePreset(
     val dim: Int = 0,
 ) {
     DUET("Duet", "Liquid glass and blue, the original look", SurfaceStyle.LIQUID_GLASS, AccentColor.BLUE),
+    DROPLERT("Droplert", "Chunky retro cards, crimson accent, heavy type", SurfaceStyle.RETRO, AccentColor.CRIMSON, FontChoice.HEAVY, dim = 30),
     FROST("Frost", "Soft frosted glass with sky blue", SurfaceStyle.FROSTED, AccentColor.SKY, FontChoice.LIGHT),
     MIDNIGHT("Midnight", "Solid dark panels with lavender", SurfaceStyle.SOLID, AccentColor.LAVENDER, dim = 25),
     OLED("OLED", "Pure black panels on a dimmed wallpaper", SurfaceStyle.AMOLED, AccentColor.WHITE, dim = 45),
@@ -69,6 +75,9 @@ enum class ThemePreset(
 
     fun apply(p: Prefs) { p.surfaceStyle = style; p.accent = accent; p.font = font; p.wallpaperDim = dim }
 }
+
+val RetroPanel = Color(0xFF28231D)
+val RetroEdge = Color(0xFF6E6757)
 
 val accent: Color get() = DuetApp.instance.prefs.accent.color
 
@@ -105,6 +114,15 @@ fun Modifier.glass(
         .background(Color(0xFF07090D).copy(alpha = 0.72f))
         .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.16f * strength), Color.Transparent)))
         .border(1.5.dp, accent.copy(alpha = 0.95f * strength), shape)
+    SurfaceStyle.RETRO -> this
+        // A hard shadow offset down-right, like a printed card lifted off the page.
+        .drawBehind {
+            val outline = shape.createOutline(size, layoutDirection, this)
+            translate(3.dp.toPx(), 4.dp.toPx()) { drawOutline(outline, Color.Black.copy(alpha = 0.6f)) }
+        }
+        .clip(shape)
+        .background(RetroPanel.copy(alpha = 0.96f))
+        .border(2.dp, RetroEdge, shape)
     SurfaceStyle.AMOLED -> this
         .clip(shape)
         .background(Color.Black)

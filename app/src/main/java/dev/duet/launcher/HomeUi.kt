@@ -193,6 +193,7 @@ fun LauncherRoot(activity: MainActivity) {
       }
         FloatingClock(activity, clockAnchor)
         if (ui.pickerOpen) WidgetPicker(activity) { ui.pickerOpen = false }
+        if (ui.voiceChat) VoiceChatPanel { ui.voiceChat = false }
     }
     }
 }
@@ -277,6 +278,9 @@ private fun AppsPane(
                     HomeColumn(activity, favorites, showHeader, showWidgets, clockAlpha = homeAlpha)
                 }
             }
+            // While scrubbing, darken what's behind the list so the apps stand out.
+            val scrubDim by animateFloatAsState(if (touchFraction != null) 0.5f else 0f, tween(if (touchFraction != null) 160 else 320), label = "scrubDim")
+            if (scrubDim > 0f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrubDim)))
             androidx.compose.animation.AnimatedVisibility(
                 visible = listOpen,
                 enter = fadeIn(tween(220)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 10 },
@@ -296,19 +300,14 @@ private fun AppsPane(
                 )
             }
             // The letter rides beside the finger, pointing at the bar.
-            val bubbleY = remember { Animatable(0f) }
-            var bubbleShown by remember { mutableStateOf(false) }
-            LaunchedEffect(touchRootY, activeLetter != null) {
-                if (activeLetter == null) return@LaunchedEffect
-                if (!bubbleShown) { bubbleY.snapTo(touchRootY); bubbleShown = true }
-                else bubbleY.animateTo(touchRootY, spring(dampingRatio = 0.85f, stiffness = 1100f))
-            }
-            LaunchedEffect(activeLetter == null) { if (activeLetter == null) { delay(220); if (activeLetter == null) bubbleShown = false } }
+            // Follows the finger exactly (an animation restarted on every move never gets going).
+            var bubbleY by remember { mutableFloatStateOf(0f) }
+            if (activeLetter != null) bubbleY = touchRootY
             val bubbleSize = 76.dp
             androidx.compose.animation.AnimatedVisibility(
                 visible = activeLetter != null,
                 modifier = Modifier.align(if (railLeft) Alignment.TopStart else Alignment.TopEnd)
-                    .offset { IntOffset(0, (bubbleY.value - paneTop - bubbleSize.toPx() / 2).roundToInt().coerceAtLeast(0)) }
+                    .offset { IntOffset(0, (bubbleY - paneTop - bubbleSize.toPx() / 2).roundToInt().coerceAtLeast(0)) }
                     // Clear of the letters leaning out from the bar.
                     .padding(horizontal = 44.dp),
                 enter = fadeIn(tween(110)) + scaleIn(spring(dampingRatio = 0.6f, stiffness = 700f), initialScale = 0.5f,

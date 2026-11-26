@@ -29,6 +29,8 @@ class UiState {
     var query by mutableStateOf("")
     var editWidgets by mutableStateOf(false)
     var pickerOpen by mutableStateOf(false)
+    /** The Claude voice chat panel is open over the home screen. */
+    var voiceChat by mutableStateOf(false)
     /** Id of the built-in widget whose settings are open, or null. */
     var configureWidget by mutableStateOf<Int?>(null)
     /** Bumped to ask the app list to focus its search field and show the keyboard. */
@@ -39,6 +41,7 @@ class UiState {
         query = ""
         editWidgets = false
         pickerOpen = false
+        voiceChat = false
     }
 }
 
@@ -263,6 +266,17 @@ class MainActivity : ComponentActivity() {
 
     private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) CalendarPermission.grants++
+    }
+
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) ui.voiceChat = true
+    }
+
+    /** The AI button: Claude voice chat on the home screen (asks for the microphone first). */
+    fun startVoiceChat() {
+        if (prefs.claudeKey.isBlank()) { openSettings(); return }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) ui.voiceChat = true
+        else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
     }
 
     fun requestCalendarAccess() = calendarPermission.launch(android.Manifest.permission.READ_CALENDAR)

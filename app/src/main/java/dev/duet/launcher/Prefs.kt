@@ -84,6 +84,8 @@ class Prefs(context: Context) {
     /** The AI button on the clock, and the AI app it talks to ("" = the default assistant). */
     var aiButton by bool("ai_button", true)
     var aiApp by string("ai_app", "")
+    /** Anthropic API key for the voice chat built into Duet (stays on the phone). */
+    var claudeKey by string("claude_key", "")
     /** Swipe right on the home/widgets screen to open the Google feed. */
     var googleFeed by bool("google_feed", true)
     private var dualLayoutName by string("dual_layout", DualLayout.HOME_AND_LIST.name)

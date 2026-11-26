@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -128,6 +129,7 @@ private fun SettingsScreen(activity: SettingsActivity) {
     var appPickerFor by remember { mutableStateOf<String?>(null) }
     var aiDialog by remember { mutableStateOf(false) }
     var styleDialog by remember { mutableStateOf(false) }
+    var keyDialog by remember { mutableStateOf(false) }
     val packs by produceState(emptyList<IconPack.Info>()) { value = withContext(Dispatchers.IO) { IconPack.installed(ctx) } }
     val packLabel = packs.firstOrNull { it.pkg == prefs.iconPack }?.label
         ?: if (prefs.iconPack.isEmpty()) "System icons" else prefs.iconPack
@@ -282,6 +284,9 @@ private fun SettingsScreen(activity: SettingsActivity) {
             item { Section("AI button") }
             item { SwitchRow("Show the AI button", prefs.aiButton, "On the clock. Tap it to start a voice chat") { prefs.aiButton = it } }
             if (prefs.aiButton) item { ActionRow("AI app", Assistant.labelOf(ctx, prefs.aiApp)) { aiDialog = true } }
+            if (prefs.aiButton && prefs.aiApp == Assistant.IN_DUET) item {
+                ActionRow("Claude API key", if (prefs.claudeKey.isBlank()) "Needed for voice chat on the home screen. Get one at console.anthropic.com" else "Set · ••••" + prefs.claudeKey.takeLast(4)) { keyDialog = true }
+            }
 
             item { Section("Google feed") }
             item { SwitchRow("Swipe right for the Google feed", prefs.googleFeed, "Swipe right on the home screen to open Google Discover (needs the Google app)") { prefs.googleFeed = it } }
@@ -464,6 +469,27 @@ private fun SettingsScreen(activity: SettingsActivity) {
         )
     }
 
+    if (keyDialog) {
+        var key by remember { mutableStateOf(prefs.claudeKey) }
+        AlertDialog(
+            onDismissRequest = { keyDialog = false },
+            confirmButton = { TextButton(onClick = { prefs.claudeKey = key.trim(); keyDialog = false }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { keyDialog = false }) { Text("Cancel") } },
+            title = { Text("Claude API key") },
+            text = {
+                Column {
+                    Text(
+                        "Voice chat on the home screen talks to Claude with your own API key from console.anthropic.com " +
+                            "(usage is billed to that account). The key is stored only on this phone.",
+                        fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 10.dp),
+                    )
+                    OutlinedTextField(key, { key = it }, singleLine = true, placeholder = { Text("sk-ant-…") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                }
+            },
+        )
+    }
+
     if (aiDialog) {
         val choices = remember { Assistant.installed(ctx) }
         AlertDialog(
@@ -477,6 +503,12 @@ private fun SettingsScreen(activity: SettingsActivity) {
                             "The AI button opens this app's voice chat when it has one, and otherwise opens the app.",
                             fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 8.dp),
                         )
+                    }
+                    item {
+                        PackChoice("Claude, right on the home screen (voice chat in Duet, needs an API key)", prefs.aiApp == Assistant.IN_DUET) {
+                            prefs.aiApp = Assistant.IN_DUET; aiDialog = false
+                            if (prefs.claudeKey.isBlank()) keyDialog = true
+                        }
                     }
                     item { PackChoice("Default assistant (the phone's)", prefs.aiApp.isEmpty()) { prefs.aiApp = ""; aiDialog = false } }
                     items(choices, key = { it.pkg }) { c -> PackChoice(c.label, prefs.aiApp == c.pkg) { prefs.aiApp = c.pkg; aiDialog = false } }
@@ -612,5 +644,6 @@ private fun previewPanel(t: ThemePreset, shape: androidx.compose.ui.graphics.Sha
         SurfaceStyle.GRADIENT -> m.background(Brush.linearGradient(listOf(a.copy(alpha = 0.6f), Color(0xFF6A3FA0).copy(alpha = 0.45f))))
         SurfaceStyle.NEON -> m.background(Color(0xFF07090D).copy(alpha = 0.75f)).border(1.5.dp, a, shape)
         SurfaceStyle.AMOLED -> m.background(Color.Black)
+        SurfaceStyle.RETRO -> m.background(RetroPanel).border(2.dp, RetroEdge, shape)
     }
 }

@@ -28,6 +28,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    packaging { resources { excludes += setOf("META-INF/*", "META-INF/versions/**") } }
 }
 
 dependencies {
@@ -41,4 +42,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.5")
     // Jetpack WindowManager: reports the Surface Duo hinge as a FoldingFeature.
     implementation("androidx.window:window:1.3.0")
+    // Voice chat on the clock's AI button talks to Claude.
+    implementation("com.anthropic:anthropic-java:3.3.0")
 }
