@@ -16,6 +16,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlin.math.abs
 import kotlin.math.exp
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.shadow
@@ -280,7 +284,7 @@ private fun AppsPane(
             }
             // While scrubbing, darken what's behind the list so the apps stand out.
             val scrubDim by animateFloatAsState(if (touchFraction != null) 0.5f else 0f, tween(if (touchFraction != null) 160 else 320), label = "scrubDim")
-            if (scrubDim > 0f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrubDim)))
+            if (scrubDim > 0f) FadedDim(scrubDim)
             androidx.compose.animation.AnimatedVisibility(
                 visible = listOpen,
                 enter = fadeIn(tween(220)) + slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 10 },
@@ -531,10 +535,10 @@ private fun AppList(
         keyboard?.show()
     }
     val favKeys = remember(favorites) { favorites.map { it.key }.toSet() }
+    if (scrim) FadedDim(0.55f)
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize()
-            .then(if (scrim) Modifier.background(Color.Black.copy(alpha = 0.55f)) else Modifier)
             .imePadding()
             .padding(horizontal = 20.dp),
     ) {
@@ -780,6 +784,33 @@ private fun sideNavigationGap(): Pair<Dp, Dp> {
 
 /** Height one rail letter needs to be readable and touchable on its own. */
 private const val RAIL_LETTER_DP = 14
+
+/**
+ * A dark layer behind the app list that carries on up under the status bar and fades out
+ * there, so there's no hard edge where the status bar starts.
+ */
+@Composable
+private fun FadedDim(alpha: Float) {
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val fade = 36.dp
+    Box(
+        Modifier.fillMaxSize()
+            // Grow upwards by the status bar's height (the pane itself starts below it).
+            .layout { m, c ->
+                val extra = top.roundToPx()
+                val p = m.measure(c.copy(minHeight = c.maxHeight + extra, maxHeight = c.maxHeight + extra))
+                layout(c.maxWidth, c.maxHeight) { p.place(0, -extra) }
+            }
+            .drawBehind {
+                val solidFrom = ((top + fade).toPx() / size.height).coerceIn(0f, 1f)
+                drawRect(Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0f),
+                    solidFrom to Color.Black.copy(alpha = alpha),
+                    1f to Color.Black.copy(alpha = alpha),
+                ))
+            }
+    )
+}
 
 /** How many letters either side of the finger the magnifying wave reaches (its spread). */
 private const val RAIL_WAVE_SIGMA = 1.6f
