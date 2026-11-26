@@ -791,16 +791,26 @@ private const val RAIL_LETTER_DP = 14
  */
 @Composable
 private fun FadedDim(alpha: Float) {
+    val prefs = DuetApp.instance.prefs
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val fade = 36.dp
+    // Also reach across under the alphabet bar (and any navigation strip beside it) and fade out
+    // at the screen edge, so there's no hard line down that side either.
+    val railOnLeft = !prefs.railOnRight
+    val gap = sideNavigationGap()
+    val side = (if (prefs.compactRail) 34.dp else 36.dp) + if (railOnLeft) gap.first else gap.second
     Box(
         Modifier.fillMaxSize()
-            // Grow upwards by the status bar's height (the pane itself starts below it).
             .layout { m, c ->
-                val extra = top.roundToPx()
-                val p = m.measure(c.copy(minHeight = c.maxHeight + extra, maxHeight = c.maxHeight + extra))
-                layout(c.maxWidth, c.maxHeight) { p.place(0, -extra) }
+                val extraTop = top.roundToPx()
+                val extraSide = side.roundToPx()
+                val p = m.measure(c.copy(
+                    minWidth = c.maxWidth + extraSide, maxWidth = c.maxWidth + extraSide,
+                    minHeight = c.maxHeight + extraTop, maxHeight = c.maxHeight + extraTop,
+                ))
+                layout(c.maxWidth, c.maxHeight) { p.place(if (railOnLeft) -extraSide else 0, -extraTop) }
             }
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
             .drawBehind {
                 val solidFrom = ((top + fade).toPx() / size.height).coerceIn(0f, 1f)
                 drawRect(Brush.verticalGradient(
@@ -808,6 +818,11 @@ private fun FadedDim(alpha: Float) {
                     solidFrom to Color.Black.copy(alpha = alpha),
                     1f to Color.Black.copy(alpha = alpha),
                 ))
+                // Fade the rail side out to nothing at the screen edge.
+                val edge = (side.toPx() / size.width).coerceIn(0f, 1f)
+                val mask = if (railOnLeft) Brush.horizontalGradient(0f to Color.Transparent, edge to Color.Black, 1f to Color.Black)
+                    else Brush.horizontalGradient(0f to Color.Black, 1f - edge to Color.Black, 1f to Color.Transparent)
+                drawRect(mask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
             }
     )
 }
