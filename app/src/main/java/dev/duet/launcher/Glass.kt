@@ -60,6 +60,7 @@ enum class ThemePreset(
     val font: FontChoice = FontChoice.DEFAULT,
     val dim: Int = 0,
 ) {
+
     DUET("Duet", "Liquid glass and blue, the original look", SurfaceStyle.LIQUID_GLASS, AccentColor.BLUE),
     POSTERBOARD("Posterboard", "Chunky retro cards, crimson accent, heavy type", SurfaceStyle.RETRO, AccentColor.CRIMSON, FontChoice.HEAVY, dim = 30),
     FROST("Frost", "Soft frosted glass with sky blue", SurfaceStyle.FROSTED, AccentColor.SKY, FontChoice.LIGHT),
@@ -71,9 +72,16 @@ enum class ThemePreset(
     TERMINAL("Terminal", "Thin outlines, lime text accents, monospace", SurfaceStyle.OUTLINE, AccentColor.LIME, FontChoice.MONO, dim = 35),
     PAPER("Paper", "Just text on the wallpaper, serif font", SurfaceStyle.MINIMAL, AccentColor.GOLD, FontChoice.SERIF, dim = 15);
 
+    /** The generated icons that go with this theme. */
+    val icons: IconStyle get() = when (this) {
+        DUET -> IconStyle.ORIGINAL; POSTERBOARD -> IconStyle.POSTER; FROST -> IconStyle.FROST
+        MIDNIGHT -> IconStyle.MIDNIGHT; OLED -> IconStyle.OLED; NEON -> IconStyle.NEON
+        SUNSET -> IconStyle.SUNSET; FOREST -> IconStyle.FOREST; TERMINAL -> IconStyle.TERMINAL; PAPER -> IconStyle.PAPER
+    }
+
     fun isCurrent(p: Prefs) = p.surfaceStyle == style && p.accent == accent && p.font == font && p.wallpaperDim == dim
 
-    fun apply(p: Prefs) { p.surfaceStyle = style; p.accent = accent; p.font = font; p.wallpaperDim = dim }
+    fun apply(p: Prefs) { p.surfaceStyle = style; p.accent = accent; p.font = font; p.wallpaperDim = dim; p.iconStyle = icons }
 }
 
 val RetroPanel = Color(0xFF28231D)

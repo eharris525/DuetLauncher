@@ -133,6 +133,7 @@ private fun SettingsScreen(activity: SettingsActivity) {
     var aiDialog by remember { mutableStateOf(false) }
     var styleDialog by remember { mutableStateOf(false) }
     var keyDialog by remember { mutableStateOf(false) }
+    var iconStyleDialog by remember { mutableStateOf(false) }
     var settingWallpaper by remember { mutableStateOf<DuetWallpaper?>(null) }
     val scope = rememberCoroutineScope()
     fun setWallpaper(wp: DuetWallpaper) {
@@ -172,6 +173,7 @@ private fun SettingsScreen(activity: SettingsActivity) {
 
             item { Section("Icons") }
             item { ActionRow("Icon pack", packLabel) { packDialog = true } }
+            item { ActionRow("Icon style", prefs.iconStyle.title + " · " + prefs.iconStyle.summary) { iconStyleDialog = true } }
             item { SwitchRow("Show icons", prefs.showIcons) { prefs.showIcons = it } }
             item { SliderRow("Icon size", prefs.iconSizeDp, 24..64, "dp") { prefs.iconSizeDp = it } }
             item { SliderRow("Label size", prefs.labelSizeSp, 14..34, "sp") { prefs.labelSizeSp = it } }
@@ -473,6 +475,37 @@ private fun SettingsScreen(activity: SettingsActivity) {
         )
     }
 
+    if (iconStyleDialog) {
+        val sample = remember { repo.all.filter { it.key in prefs.favorites }.take(4).ifEmpty { repo.all.take(4) } }
+        AlertDialog(
+            onDismissRequest = { iconStyleDialog = false },
+            confirmButton = { TextButton(onClick = { iconStyleDialog = false }) { Text("Close") } },
+            title = { Text("Icon style") },
+            text = {
+                LazyColumn {
+                    item {
+                        Text("Generated from each app's own icon (or your icon pack's). Picking a theme sets its matching style.",
+                            fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 8.dp))
+                    }
+                    items(IconStyle.entries) { st ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { prefs.iconStyle = st }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = prefs.iconStyle == st, onClick = null)
+                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                                Text(st.title)
+                                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    sample.forEach { a -> StyledIcon(a, st, 30) }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     if (styleDialog) {
         AlertDialog(
             onDismissRequest = { styleDialog = false },
@@ -692,4 +725,16 @@ private fun WallpaperCard(wp: DuetWallpaper, busy: Boolean, onClick: () -> Unit)
         Text(wp.title, fontSize = 13.sp)
         Text(wp.theme.title + " theme", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
     }
+}
+
+/** [app]'s icon in [style], regardless of the current setting (for previews). */
+@Composable
+private fun StyledIcon(app: AppInfo, style: IconStyle, sizeDp: Int) {
+    val repo = DuetApp.instance.apps
+    val pack = DuetApp.instance.prefs.iconPack
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { sizeDp.dp.roundToPx() }
+    val bmp by produceState(repo.peekIcon(app, pack, px, style), app.key, style, px) {
+        value = repo.peekIcon(app, pack, px, style) ?: repo.icon(app, pack, px, style)
+    }
+    Box(Modifier.size(sizeDp.dp)) { bmp?.let { androidx.compose.foundation.Image(it, null, Modifier.fillMaxSize()) } }
 }

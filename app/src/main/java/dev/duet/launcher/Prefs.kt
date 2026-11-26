@@ -47,6 +47,11 @@ class Prefs(context: Context) {
 
     /** Package name of the selected icon pack, or "" for system icons. */
     var iconPack by string("icon_pack", "")
+    private var iconStyleName by string("icon_style", IconStyle.ORIGINAL.name)
+    /** Generated look applied on top of the icon (pack or system). */
+    var iconStyle: IconStyle
+        get() = IconStyle.entries.firstOrNull { it.name == iconStyleName } ?: IconStyle.ORIGINAL
+        set(v) { iconStyleName = v.name }
     var showIcons by bool("show_icons", true)
     var iconSizeDp by int("icon_size", 36)
     var labelSizeSp by int("label_size", 22)

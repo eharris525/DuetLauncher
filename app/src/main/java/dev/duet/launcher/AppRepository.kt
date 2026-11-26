@@ -80,18 +80,19 @@ class AppRepository(private val ctx: Context) {
     }
 
     /** Already-loaded icon, if any — lets the UI draw it on the first frame. */
-    fun peekIcon(app: AppInfo, packPkg: String, sizePx: Int): ImageBitmap? = iconCache.get("${app.key}|$packPkg|$sizePx")
+    fun peekIcon(app: AppInfo, packPkg: String, sizePx: Int, style: IconStyle = IconStyle.ORIGINAL): ImageBitmap? =
+        iconCache.get("${app.key}|$packPkg|$sizePx|$style")
 
     /** Icon from the selected pack if it has one for this app, otherwise the system icon. */
-    suspend fun icon(app: AppInfo, packPkg: String, sizePx: Int): ImageBitmap? = withContext(Dispatchers.IO) {
-        val cacheKey = "${app.key}|$packPkg|$sizePx"
+    suspend fun icon(app: AppInfo, packPkg: String, sizePx: Int, style: IconStyle = IconStyle.ORIGINAL): ImageBitmap? = withContext(Dispatchers.IO) {
+        val cacheKey = "${app.key}|$packPkg|$sizePx|$style"
         iconCache.get(cacheKey)?.let { return@withContext it }
         val themed = pack(packPkg)?.drawableFor(app.component)?.let {
             if (app.user == android.os.Process.myUserHandle()) it
             else ctx.packageManager.getUserBadgedIcon(it, app.user)
         }
         val drawable = themed ?: activityInfos[app.key]?.getBadgedIcon(0) ?: return@withContext null
-        val bmp = runCatching { drawable.toBitmap(sizePx, sizePx).asImageBitmap() }.getOrNull()
+        val bmp = runCatching { style.render(drawable, sizePx).asImageBitmap() }.getOrNull()
             ?: return@withContext null
         iconCache.put(cacheKey, bmp)
         bmp

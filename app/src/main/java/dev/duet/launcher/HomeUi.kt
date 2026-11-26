@@ -650,10 +650,11 @@ fun AppIcon(app: AppInfo, sizeDp: Int) {
     val repo = DuetApp.instance.apps
     val px = with(LocalDensity.current) { sizeDp.dp.roundToPx() }
     val pack = prefs.iconPack
+    val style = prefs.iconStyle
     // Always re-resolve when the app changes: produceState keeps the previous value across key
     // changes, so a row that now shows a different app would otherwise keep the old icon.
-    val bmp by produceState(repo.peekIcon(app, pack, px), app.key, pack, px) {
-        value = repo.peekIcon(app, pack, px) ?: repo.icon(app, pack, px)
+    val bmp by produceState(repo.peekIcon(app, pack, px, style), app.key, pack, px, style) {
+        value = repo.peekIcon(app, pack, px, style) ?: repo.icon(app, pack, px, style)
     }
     Box(Modifier.size(sizeDp.dp)) { bmp?.let { Image(it, contentDescription = null, modifier = Modifier.fillMaxSize()) } }
 }
