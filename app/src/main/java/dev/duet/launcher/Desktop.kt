@@ -258,6 +258,12 @@ object DesktopMode {
         // An app that's already open comes to the front where it is, rather than jumping to a new spot.
         val known = windows.firstOrNull { it.pkg == appInfo.component.packageName }?.bounds
         val opts = ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).setLaunchBounds(known ?: nextWindow(d)).toBundle()
+        startMain(appInfo, opts)
+        main.postDelayed({ refreshRunning() }, 800)
+        if (known == null) main.postDelayed({ rescueIfHidden(appInfo) }, RESCUE_CHECK_MS)
+    }
+
+    private fun startMain(appInfo: AppInfo, opts: Bundle?) {
         val la = app.getSystemService(android.content.pm.LauncherApps::class.java)
         val ok = if (appInfo.user == android.os.Process.myUserHandle()) runCatching {
             app.startActivity(
@@ -267,8 +273,34 @@ object DesktopMode {
             )
         }.isSuccess else false
         if (!ok) runCatching { la.startMainActivity(appInfo.component, appInfo.user, null, opts) }
-        main.postDelayed({ refreshRunning() }, 800)
     }
+
+    /** App being moved over from the phone by [rescueIfHidden]. */
+    private var rescuing: String? = null
+
+    /**
+     * An app that already has a task on the phone (it's in the phone's recents) is moved to the
+     * external display when launched there, but on the Duo the moved task stays stopped and
+     * never shows. Waking it on the phone first and then moving it makes it come up properly,
+     * so when the window hasn't appeared, do that and then put the touchpad back.
+     */
+    private fun rescueIfHidden(appInfo: AppInfo) {
+        val d = display ?: return
+        val pkg = appInfo.component.packageName
+        if (rescuing != null || windows.any { it.pkg == pkg }) return
+        rescuing = pkg
+        android.util.Log.d("DuetDesktop", "$pkg didn't appear; waking it on the phone, then moving it")
+        startMain(appInfo, ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY).toBundle())
+        main.postDelayed({
+            startMain(appInfo, ActivityOptions.makeBasic().setLaunchDisplayId(d.displayId).setLaunchBounds(nextWindow(d)).toBundle())
+            main.postDelayed({ openTouchpad(); refreshRunning(); rescuing = null }, 700)
+        }, RESCUE_HOP_MS)
+    }
+
+    /** How long a launched app gets to show its window before it's treated as stuck. */
+    private const val RESCUE_CHECK_MS = 1600L
+    /** Time on the phone before moving it on: long enough for it to resume. */
+    private const val RESCUE_HOP_MS = 400L
 
     fun launchPackage(pkg: String) {
         DuetApp.instance.apps.all.firstOrNull { it.component.packageName == pkg }?.let { launch(it) }
