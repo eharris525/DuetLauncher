@@ -6,6 +6,9 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.FlowRow
@@ -130,6 +133,17 @@ private fun SettingsScreen(activity: SettingsActivity) {
     var aiDialog by remember { mutableStateOf(false) }
     var styleDialog by remember { mutableStateOf(false) }
     var keyDialog by remember { mutableStateOf(false) }
+    var settingWallpaper by remember { mutableStateOf<DuetWallpaper?>(null) }
+    val scope = rememberCoroutineScope()
+    fun setWallpaper(wp: DuetWallpaper) {
+        if (settingWallpaper != null) return
+        settingWallpaper = wp
+        scope.launch {
+            val ok = withContext(Dispatchers.Default) { DuetWallpaper.apply(ctx, wp) }
+            settingWallpaper = null
+            android.widget.Toast.makeText(ctx, if (ok) "Wallpaper set: ${wp.title}" else "Couldn't set the wallpaper", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
     val packs by produceState(emptyList<IconPack.Info>()) { value = withContext(Dispatchers.IO) { IconPack.installed(ctx) } }
     val packLabel = packs.firstOrNull { it.pkg == prefs.iconPack }?.label
         ?: if (prefs.iconPack.isEmpty()) "System icons" else prefs.iconPack
@@ -167,6 +181,20 @@ private fun SettingsScreen(activity: SettingsActivity) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
                     items(ThemePreset.entries) { t -> ThemeCard(t, t.isCurrent(prefs)) { t.apply(prefs) } }
                 }
+            }
+            item {
+                val current = ThemePreset.entries.firstOrNull { it.isCurrent(prefs) }
+                val match = current?.let { DuetWallpaper.forTheme(it) }
+                if (match != null) ActionRow("Use the matching wallpaper", if (settingWallpaper == match) "Setting ${match.title}…" else "Sets \"${match.title}\" as your wallpaper") {
+                    setWallpaper(match)
+                }
+            }
+            item {
+                Text("Wallpapers", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                    items(DuetWallpaper.entries) { wp -> WallpaperCard(wp, busy = settingWallpaper == wp) { setWallpaper(wp) } }
+                }
+                Text("Drawn to fit both screens. Tap one to set it for the home and lock screens.", fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
             }
             item { ActionRow("Panel style", prefs.surfaceStyle.title) { styleDialog = true } }
             item {
@@ -645,5 +673,23 @@ private fun previewPanel(t: ThemePreset, shape: androidx.compose.ui.graphics.Sha
         SurfaceStyle.NEON -> m.background(Color(0xFF07090D).copy(alpha = 0.75f)).border(1.5.dp, a, shape)
         SurfaceStyle.AMOLED -> m.background(Color.Black)
         SurfaceStyle.RETRO -> m.background(RetroPanel).border(2.dp, RetroEdge, shape)
+    }
+}
+
+/** A built-in wallpaper's thumbnail, drawn small in the background. */
+@Composable
+private fun WallpaperCard(wp: DuetWallpaper, busy: Boolean, onClick: () -> Unit) {
+    val thumb by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, wp) {
+        value = withContext(Dispatchers.Default) { wp.render(330, 228).asImageBitmap() }
+    }
+    Column(Modifier.width(132.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.fillMaxWidth().height(91.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.05f)), contentAlignment = Alignment.Center) {
+            thumb?.let { androidx.compose.foundation.Image(it, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
+            if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(wp.title, fontSize = 13.sp)
+        Text(wp.theme.title + " theme", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
     }
 }

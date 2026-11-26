@@ -61,7 +61,7 @@ enum class ThemePreset(
     val dim: Int = 0,
 ) {
     DUET("Duet", "Liquid glass and blue, the original look", SurfaceStyle.LIQUID_GLASS, AccentColor.BLUE),
-    DROPLERT("Droplert", "Chunky retro cards, crimson accent, heavy type", SurfaceStyle.RETRO, AccentColor.CRIMSON, FontChoice.HEAVY, dim = 30),
+    POSTERBOARD("Posterboard", "Chunky retro cards, crimson accent, heavy type", SurfaceStyle.RETRO, AccentColor.CRIMSON, FontChoice.HEAVY, dim = 30),
     FROST("Frost", "Soft frosted glass with sky blue", SurfaceStyle.FROSTED, AccentColor.SKY, FontChoice.LIGHT),
     MIDNIGHT("Midnight", "Solid dark panels with lavender", SurfaceStyle.SOLID, AccentColor.LAVENDER, dim = 25),
     OLED("OLED", "Pure black panels on a dimmed wallpaper", SurfaceStyle.AMOLED, AccentColor.WHITE, dim = 45),
